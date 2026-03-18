@@ -2,8 +2,9 @@
 
 const express = require('express');
 const db = require('../db');
-const ollamaService = require('../services/ollamaService');
+const AIServiceFactory = require('../services/aiServiceFactory');
 const categorizationService = require('../services/categorizationService');
+const historyService = require('../services/historyService');
 const config = require('../config');
 
 const router = express.Router();
@@ -12,14 +13,15 @@ const router = express.Router();
 
 router.get('/health', async (_req, res) => {
   try {
-    const [dbOk, ollamaStatus] = await Promise.all([
+    const aiService = AIServiceFactory.getService();
+    const [dbOk, aiStatus] = await Promise.all([
       db.healthCheck(),
-      ollamaService.healthCheck(),
+      aiService.healthCheck(),
     ]);
     res.json({
-      status: dbOk && ollamaStatus.ok ? 'ok' : 'degraded',
+      status: dbOk && aiStatus.ok ? 'ok' : 'degraded',
       database: { ok: dbOk },
-      ollama: ollamaStatus,
+      ai: { provider: config.aiProvider, ...aiStatus },
       scheduler: {
         enabled: config.scheduler.enabled,
         cron: config.scheduler.cronExpression,
@@ -76,13 +78,13 @@ router.post('/expenses/:id/suggest', async (req, res) => {
       return res.status(400).json({ error: 'No categories found in database' });
     }
 
-    const suggestion = await ollamaService.suggestCategory(expense, categories);
+    const suggestion = await AIServiceFactory.getService().suggestCategory(expense, categories);
     const category = categories.find((c) => c.id === suggestion.categoryId);
 
     res.json({
       expense: { id: expense.id, title: expense.title, amount: expense.amount },
       suggestion: { ...suggestion, categoryName: category ? category.name : null },
-      meetsThreshold: suggestion.confidence >= config.ollama.confidenceThreshold,
+      meetsThreshold: suggestion.confidence >= config.confidenceThreshold,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -136,6 +138,47 @@ router.post('/process', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── History ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/history?limit=50
+ * Returns the most recent processing history records.
+ */
+router.get('/history', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+    const rows = historyService.getHistory(limit);
+    const stats = historyService.getStats();
+    res.json({ history: rows, stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Settings (read-only view of current config) ───────────────────────────────
+
+/**
+ * GET /api/settings
+ * Returns the current non-sensitive configuration for display in the UI.
+ */
+router.get('/settings', (_req, res) => {
+  res.json({
+    aiProvider: config.aiProvider,
+    ollama: {
+      baseUrl: config.ollama.baseUrl,
+      model: config.ollama.model,
+    },
+    openai: {
+      baseUrl: config.openai.baseUrl,
+      model: config.openai.model,
+      apiKeySet: Boolean(config.openai.apiKey),
+    },
+    confidenceThreshold: config.confidenceThreshold,
+    scheduler: config.scheduler,
+    processing: config.processing,
+  });
 });
 
 module.exports = router;

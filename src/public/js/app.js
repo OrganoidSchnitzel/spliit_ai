@@ -1,10 +1,12 @@
-/* global client-side JavaScript – no bundler required */
+/* client-side JavaScript – no bundler required */
 'use strict';
 
 // ─── SPA router ───────────────────────────────────────────────────────────────
 const pages = {
   '/': 'page-dashboard',
   '/playground': 'page-playground',
+  '/history': 'page-history',
+  '/settings': 'page-settings',
 };
 
 function showPage(path) {
@@ -24,6 +26,8 @@ document.querySelectorAll('.nav-link').forEach((a) => {
     history.pushState({}, '', href);
     showPage(href);
     if (href === '/playground') loadPlayground();
+    if (href === '/history') loadHistory();
+    if (href === '/settings') loadSettings();
   });
 });
 
@@ -72,11 +76,13 @@ async function loadDashboard() {
     dbEl.textContent = healthRes.database?.ok ? '✔ Connected' : '✘ Disconnected';
     dbEl.className = `status-value ${healthRes.database?.ok ? 'ok' : 'error'}`;
 
-    const ollamaEl = document.getElementById('status-ollama');
-    ollamaEl.textContent = healthRes.ollama?.ok
-      ? `✔ ${healthRes.ollama.models?.length ? healthRes.ollama.models[0] : 'Ready'}`
+    const aiEl = document.getElementById('status-ai');
+    const aiOk = healthRes.ai?.ok;
+    document.getElementById('status-ai-provider').textContent = healthRes.ai?.provider || '—';
+    aiEl.textContent = aiOk
+      ? `✔ ${healthRes.ai.models?.length ? healthRes.ai.models[0] : 'Ready'}`
       : '✘ Unreachable';
-    ollamaEl.className = `status-value ${healthRes.ollama?.ok ? 'ok' : 'error'}`;
+    aiEl.className = `status-value ${aiOk ? 'ok' : 'error'}`;
 
     const schedEl = document.getElementById('status-scheduler');
     schedEl.textContent = healthRes.scheduler?.enabled
@@ -188,7 +194,7 @@ document.getElementById('btn-pg-suggest').addEventListener('click', async () => 
   if (!currentExpenseId) return;
   const btn = document.getElementById('btn-pg-suggest');
   btn.disabled = true;
-  btn.textContent = '⏳ Asking Ollama…';
+  btn.textContent = '⏳ Asking AI…';
 
   try {
     const res = await fetch(`/api/expenses/${currentExpenseId}/suggest`, { method: 'POST' }).then(
@@ -263,6 +269,85 @@ function playgroundFor(expenseId) {
   });
 }
 
+// ─── History ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history?limit=100').then((r) => r.json());
+    const { history: rows = [], stats = {} } = res;
+
+    document.getElementById('hist-total').textContent   = stats.total ?? '—';
+    document.getElementById('hist-applied').textContent = stats.applied ?? '—';
+    document.getElementById('hist-low').textContent     = stats.lowConfidence ?? '—';
+    document.getElementById('hist-errors').textContent  = stats.errors ?? '—';
+
+    const tbody = document.getElementById('history-tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No processing history yet.</td></tr>';
+      return;
+    }
+
+    const statusBadge = (s) => {
+      const map = { applied: 'badge-high', low_confidence: 'badge-mid', error: 'badge-low' };
+      const label = { applied: 'Applied', low_confidence: 'Low confidence', error: 'Error' };
+      return `<span class="badge ${map[s] || ''}">${label[s] || s}</span>`;
+    };
+
+    tbody.innerHTML = rows.map((r) => `
+      <tr>
+        <td>${fmtDate(r.processed_at)}</td>
+        <td>${esc(r.title)}</td>
+        <td>${esc(r.group_name || '—')}</td>
+        <td>${fmt(r.amount, r.currency)}</td>
+        <td>${esc(r.category_name || (r.category_id ? `#${r.category_id}` : '—'))}</td>
+        <td>${r.confidence != null ? confidenceBadge(r.confidence) : '—'}</td>
+        <td>${statusBadge(r.status)}</td>
+        <td>${esc(r.provider || '—')}</td>
+      </tr>`).join('');
+  } catch (err) {
+    console.error('History load error:', err);
+  }
+}
+
+// ─── Settings ──────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  const container = document.getElementById('settings-content');
+  try {
+    const s = await fetch('/api/settings').then((r) => r.json());
+
+    const row = (label, value) =>
+      `<div class="settings-row"><span class="settings-label">${esc(label)}</span><span class="settings-val">${esc(String(value))}</span></div>`;
+
+    container.innerHTML = `
+      <div class="settings-group">
+        <h3>AI Provider</h3>
+        ${row('Active provider', s.aiProvider)}
+      </div>
+      <div class="settings-group">
+        <h3>Ollama</h3>
+        ${row('Base URL', s.ollama.baseUrl)}
+        ${row('Model', s.ollama.model)}
+      </div>
+      <div class="settings-group">
+        <h3>OpenAI-compatible API</h3>
+        ${row('Base URL', s.openai.baseUrl)}
+        ${row('Model', s.openai.model)}
+        ${row('API Key', s.openai.apiKeySet ? '✔ Set' : '✘ Not set')}
+      </div>
+      <div class="settings-group">
+        <h3>Processing</h3>
+        ${row('Confidence threshold', s.confidenceThreshold)}
+        ${row('Batch size', s.processing.batchSize)}
+        ${row('Scheduler enabled', s.scheduler.enabled)}
+        ${row('Cron expression', s.scheduler.cronExpression)}
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<p class="error">Failed to load settings: ${esc(err.message)}</p>`;
+  }
+}
+
 // ─── Init ───────────────────────────────────────────────────────────────────────
 loadDashboard();
 if (location.pathname === '/playground') loadPlayground();
+if (location.pathname === '/history') loadHistory();
+if (location.pathname === '/settings') loadSettings();

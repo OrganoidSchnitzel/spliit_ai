@@ -128,4 +128,4 @@ async function suggestCategory(expense, categories) {
   };
 }
 
-module.exports = { healthCheck, suggestCategory, buildPrompt };
+module.exports = { healthCheck, suggestCategory, buildPrompt, stripMarkdown };

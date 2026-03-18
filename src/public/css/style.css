@@ -217,3 +217,33 @@ body {
 .badge-high { background: #dcfce7; color: #15803d; }
 .badge-mid  { background: #fef9c3; color: #92400e; }
 .badge-low  { background: #fee2e2; color: #b91c1c; }
+
+/* ─── Settings page ──────────────────────────────────────────────────────── */
+.settings-grid { display: flex; flex-direction: column; gap: 1.5rem; max-width: 640px; }
+
+.settings-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow);
+}
+.settings-group h3 {
+  font-size: .875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  margin-bottom: .75rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border);
+}
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .375rem 0;
+  font-size: .875rem;
+}
+.settings-label { color: var(--text-muted); }
+.settings-val   { font-weight: 500; font-family: monospace; }

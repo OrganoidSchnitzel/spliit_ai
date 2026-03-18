@@ -9,12 +9,20 @@ jest.mock('../src/db', () => ({
   pool: {},
 }));
 
-jest.mock('../src/services/ollamaService', () => ({
-  suggestCategory: jest.fn(),
+// Mock the AI service factory so it returns a stable mock
+const mockAiService = { suggestCategory: jest.fn() };
+jest.mock('../src/services/aiServiceFactory', () => ({
+  getService: () => mockAiService,
+}));
+
+// Suppress SQLite history writes in unit tests
+jest.mock('../src/services/historyService', () => ({
+  recordResult: jest.fn(),
+  getHistory: jest.fn(() => []),
+  getStats: jest.fn(() => ({ total: 0, applied: 0, lowConfidence: 0, errors: 0 })),
 }));
 
 const db = require('../src/db');
-const ollamaService = require('../src/services/ollamaService');
 
 const CATEGORIES = [
   { id: 1, grouping: 'Food', name: 'Groceries' },
@@ -34,11 +42,11 @@ const EXPENSE = {
 describe('categorizationService.processExpense', () => {
   beforeEach(() => {
     db.query.mockReset();
-    ollamaService.suggestCategory.mockReset();
+    mockAiService.suggestCategory.mockReset();
   });
 
   it('applies category when confidence meets threshold', async () => {
-    ollamaService.suggestCategory.mockResolvedValue({
+    mockAiService.suggestCategory.mockResolvedValue({
       categoryId: 1,
       confidence: 0.9,
       reasoning: 'Grocery store',
@@ -56,7 +64,7 @@ describe('categorizationService.processExpense', () => {
   });
 
   it('returns low_confidence when confidence is below threshold', async () => {
-    ollamaService.suggestCategory.mockResolvedValue({
+    mockAiService.suggestCategory.mockResolvedValue({
       categoryId: 2,
       confidence: 0.3,
       reasoning: 'Maybe transport?',
@@ -68,13 +76,13 @@ describe('categorizationService.processExpense', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('returns error status when Ollama throws', async () => {
-    ollamaService.suggestCategory.mockRejectedValue(new Error('Ollama timeout'));
+  it('returns error status when AI service throws', async () => {
+    mockAiService.suggestCategory.mockRejectedValue(new Error('AI timeout'));
 
     const result = await categorizationService.processExpense(EXPENSE, CATEGORIES);
 
     expect(result.status).toBe('error');
-    expect(result.error).toContain('Ollama timeout');
+    expect(result.error).toContain('AI timeout');
     expect(db.query).not.toHaveBeenCalled();
   });
 });
@@ -82,7 +90,7 @@ describe('categorizationService.processExpense', () => {
 describe('categorizationService.runBatch', () => {
   beforeEach(() => {
     db.query.mockReset();
-    ollamaService.suggestCategory.mockReset();
+    mockAiService.suggestCategory.mockReset();
   });
 
   it('returns zero stats when there are no uncategorized expenses', async () => {
@@ -101,7 +109,7 @@ describe('categorizationService.runBatch', () => {
       .mockResolvedValueOnce({ rows: [EXPENSE, { id: 'e-2', title: 'Gas station', amount: 5000, currency: 'EUR', notes: null, expenseDate: '2024-01-16', groupName: 'Home' }] }) // getUncategorizedExpenses
       .mockResolvedValue({ rows: [] });                   // UPDATE calls
 
-    ollamaService.suggestCategory
+    mockAiService.suggestCategory
       .mockResolvedValueOnce({ categoryId: 1, confidence: 0.85, reasoning: 'Groceries' })
       .mockResolvedValueOnce({ categoryId: 2, confidence: 0.4, reasoning: 'Maybe fuel' });
 
@@ -119,6 +127,6 @@ describe('categorizationService.runBatch', () => {
 
     const stats = await categorizationService.runBatch();
     expect(stats.processed).toBe(0);
-    expect(ollamaService.suggestCategory).not.toHaveBeenCalled();
+    expect(mockAiService.suggestCategory).not.toHaveBeenCalled();
   });
 });

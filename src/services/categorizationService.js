@@ -1,7 +1,8 @@
 'use strict';
 
 const db = require('../db');
-const ollamaService = require('./ollamaService');
+const AIServiceFactory = require('./aiServiceFactory');
+const historyService = require('./historyService');
 const config = require('../config');
 
 /**
@@ -73,23 +74,62 @@ async function updateExpenseCategory(expenseId, categoryId) {
  * @returns {{ expenseId: string, status: 'applied'|'low_confidence'|'error', suggestion?: object, error?: string }}
  */
 async function processExpense(expense, categories) {
+  const aiService = AIServiceFactory.getService();
   try {
-    const suggestion = await ollamaService.suggestCategory(expense, categories);
+    const suggestion = await aiService.suggestCategory(expense, categories);
+    const categoryEntry = categories.find((c) => c.id === suggestion.categoryId);
+    const categoryName = categoryEntry ? categoryEntry.name : null;
 
-    if (suggestion.confidence >= config.ollama.confidenceThreshold) {
+    if (suggestion.confidence >= config.confidenceThreshold) {
       await updateExpenseCategory(expense.id, suggestion.categoryId);
       console.log(
         `[Categorization] Applied category ${suggestion.categoryId} to "${expense.title}" (confidence=${suggestion.confidence.toFixed(2)})`
       );
+      historyService.recordResult({
+        expenseId: expense.id,
+        title: expense.title,
+        groupName: expense.groupName,
+        amount: expense.amount,
+        currency: expense.currency,
+        categoryId: suggestion.categoryId,
+        categoryName,
+        confidence: suggestion.confidence,
+        reasoning: suggestion.reasoning,
+        status: 'applied',
+        provider: config.aiProvider,
+      });
       return { expenseId: expense.id, status: 'applied', suggestion };
     }
 
     console.log(
-      `[Categorization] Low confidence for "${expense.title}": ${suggestion.confidence.toFixed(2)} < ${config.ollama.confidenceThreshold}`
+      `[Categorization] Low confidence for "${expense.title}": ${suggestion.confidence.toFixed(2)} < ${config.confidenceThreshold}`
     );
+    historyService.recordResult({
+      expenseId: expense.id,
+      title: expense.title,
+      groupName: expense.groupName,
+      amount: expense.amount,
+      currency: expense.currency,
+      categoryId: suggestion.categoryId,
+      categoryName,
+      confidence: suggestion.confidence,
+      reasoning: suggestion.reasoning,
+      status: 'low_confidence',
+      provider: config.aiProvider,
+    });
     return { expenseId: expense.id, status: 'low_confidence', suggestion };
   } catch (err) {
     console.error(`[Categorization] Error processing "${expense.title}": ${err.message}`);
+    historyService.recordResult({
+      expenseId: expense.id,
+      title: expense.title,
+      groupName: expense.groupName,
+      amount: expense.amount,
+      currency: expense.currency,
+      status: 'error',
+      reasoning: err.message,
+      provider: config.aiProvider,
+    });
     return { expenseId: expense.id, status: 'error', error: err.message };
   }
 }

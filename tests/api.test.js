@@ -2,7 +2,7 @@
 
 /**
  * Integration-style tests for the Express API using supertest.
- * The database and Ollama are mocked so these run without external services.
+ * The database and AI services are mocked so these run without external services.
  */
 
 const request = require('supertest');
@@ -15,14 +15,31 @@ jest.mock('../src/db', () => ({
   pool: {},
 }));
 
+// Mock the AI service factory + the services it returns
+const mockAiService = {
+  healthCheck: jest.fn().mockResolvedValue({ ok: true, models: ['llama3.2'] }),
+  suggestCategory: jest.fn(),
+};
+jest.mock('../src/services/aiServiceFactory', () => ({
+  getService: () => mockAiService,
+}));
+
+// Also mock ollamaService to avoid side-effects (buildPrompt is still needed)
 jest.mock('../src/services/ollamaService', () => ({
   healthCheck: jest.fn().mockResolvedValue({ ok: true, models: ['llama3.2'] }),
   suggestCategory: jest.fn(),
   buildPrompt: jest.requireActual('../src/services/ollamaService').buildPrompt,
+  stripMarkdown: jest.requireActual('../src/services/ollamaService').stripMarkdown,
+}));
+
+// Suppress SQLite history writes in API tests
+jest.mock('../src/services/historyService', () => ({
+  recordResult: jest.fn(),
+  getHistory: jest.fn(() => []),
+  getStats: jest.fn(() => ({ total: 0, applied: 0, lowConfidence: 0, errors: 0 })),
 }));
 
 const db = require('../src/db');
-const ollamaService = require('../src/services/ollamaService');
 
 const MOCK_CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -46,7 +63,29 @@ describe('GET /api/health', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.database.ok).toBe(true);
-    expect(res.body.ollama.ok).toBe(true);
+    expect(res.body.ai.ok).toBe(true);
+  });
+});
+
+describe('GET /api/settings', () => {
+  it('returns non-sensitive config', async () => {
+    const res = await request(app).get('/api/settings');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('aiProvider');
+    expect(res.body).toHaveProperty('ollama');
+    expect(res.body).toHaveProperty('openai');
+    expect(res.body.openai).not.toHaveProperty('apiKey'); // must not leak the key
+    expect(res.body.openai).toHaveProperty('apiKeySet');
+  });
+});
+
+describe('GET /api/history', () => {
+  it('returns history array and stats', async () => {
+    const res = await request(app).get('/api/history');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('history');
+    expect(res.body).toHaveProperty('stats');
+    expect(Array.isArray(res.body.history)).toBe(true);
   });
 });
 
@@ -78,12 +117,12 @@ describe('GET /api/expenses/uncategorized', () => {
 
 describe('POST /api/expenses/:id/suggest', () => {
   beforeEach(() => {
-    // First call returns categories, second call returns the expense
+    // First call returns the expense, second call returns categories
     db.query
       .mockResolvedValueOnce({ rows: [MOCK_EXPENSE] })   // getExpenseById
       .mockResolvedValueOnce({ rows: MOCK_CATEGORIES }); // getCategories
 
-    ollamaService.suggestCategory.mockResolvedValue({
+    mockAiService.suggestCategory.mockResolvedValue({
       categoryId: 1,
       confidence: 0.88,
       reasoning: 'Expense title mentions supermarket.',
