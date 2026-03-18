@@ -66,7 +66,7 @@ async function updateExpenseCategory(expenseId, categoryId) {
 }
 
 /**
- * Process a single expense: ask Ollama for a suggestion and, if confidence
+ * Process a single expense: ask the AI service for a suggestion and, if confidence
  * exceeds the threshold, apply it automatically.
  *
  * @param {object} expense

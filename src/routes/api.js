@@ -60,7 +60,7 @@ router.get('/expenses/uncategorized', async (_req, res) => {
 
 /**
  * POST /api/expenses/:id/suggest
- * Ask Ollama to suggest a category for a specific expense WITHOUT applying it.
+ * Ask the AI service to suggest a category for a specific expense WITHOUT applying it.
  * Used by the playground.
  */
 router.post('/expenses/:id/suggest', async (req, res) => {
