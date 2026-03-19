@@ -44,6 +44,58 @@ function buildPrompt(expense, categories) {
   const categoryList = categories
     .map((c) => `- [ID: ${c.id}] ${c.name} (Group: ${c.grouping})`)
     .join('\n');
+  const allowedNames = categories.length
+    ? categories.map((c) => `"${c.name}"`).join(', ')
+    : '(none)';
+  const foodLikeNames = categories
+    .filter((c) => /food|drink|restaurant|dining|grocer|supermarket/i.test(`${c.grouping} ${c.name}`))
+    .map((c) => `"${c.name}"`)
+    .join(', ');
+
+  const groceriesExampleCategory =
+    categories.find((c) => /grocer|supermarket|lebensmittel/i.test(c.name)) ||
+    categories[0];
+  const fuelKeywordCategory = categories.find((c) =>
+    /fuel|gas|petrol|tank/i.test(c.name)
+  );
+  const alternateExampleCategory =
+    groceriesExampleCategory && categories.length > 1
+      ? categories.find((c) => c.id !== groceriesExampleCategory.id)
+      : undefined;
+  let fuelExampleCategory = fuelKeywordCategory;
+  if (fuelExampleCategory && groceriesExampleCategory) {
+    fuelExampleCategory =
+      fuelExampleCategory.id === groceriesExampleCategory.id
+        ? alternateExampleCategory
+        : fuelExampleCategory;
+  } else if (!fuelExampleCategory) {
+    fuelExampleCategory = alternateExampleCategory || groceriesExampleCategory;
+  }
+  const exampleSection =
+    groceriesExampleCategory &&
+    fuelExampleCategory &&
+    groceriesExampleCategory.id !== fuelExampleCategory.id
+      ? `Few-shot examples (follow this mapping behavior exactly):
+Example 1:
+Input expense title: "Edeka"
+Correct output:
+{
+  "reasoning": "Edeka is a German supermarket merchant, so this is a grocery expense.",
+  "categoryName": "${groceriesExampleCategory.name}",
+  "categoryId": ${groceriesExampleCategory.id},
+  "confidence": 0.91
+}
+
+Example 2:
+Input expense title: "Tankstelle"
+Correct output:
+{
+  "reasoning": "Tankstelle means gas station in German, so this maps to fuel expenses.",
+  "categoryName": "${fuelExampleCategory.name}",
+  "categoryId": ${fuelExampleCategory.id},
+  "confidence": 0.93
+}`
+      : '';
 
   const amountFormatted = expense.currency
     ? `${(expense.amount / 100).toFixed(2)} ${expense.currency}`
@@ -63,27 +115,12 @@ Rules:
 3) Expense titles and notes are often in German (for example: Edeka, Tankstelle). Interpret German context correctly before mapping to a category.
 4) If uncertain, pick the best matching category and lower confidence.
 5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
+6) Never invent or alter category names. categoryName MUST be one of: ${allowedNames}.
+7) Reasoning must describe the spending type first (e.g., groceries, fuel, furniture), then map that type to the closest category from the list.
+8) Do not map by superficial word overlap. First infer what was purchased or the merchant type, then choose the closest category from the list.
+9) For household/furniture item titles (e.g., Schrank, Tisch, Stuhl), avoid food-related categories unless the merchant clearly indicates food service or groceries${foodLikeNames ? ` (${foodLikeNames})` : ''}.
 
-Few-shot examples (follow this mapping behavior exactly):
-Example 1:
-Input expense title: "Edeka"
-Correct output:
-{
-  "reasoning": "Edeka is a German supermarket merchant, so this is a grocery expense.",
-  "categoryName": "Groceries",
-  "categoryId": 1,
-  "confidence": 0.91
-}
-
-Example 2:
-Input expense title: "Tankstelle"
-Correct output:
-{
-  "reasoning": "Tankstelle means gas station in German, so this maps to fuel expenses.",
-  "categoryName": "Fuel",
-  "categoryId": 3,
-  "confidence": 0.93
-}
+${exampleSection}
 
 Expense:
   Title: ${expense.title}

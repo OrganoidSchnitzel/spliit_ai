@@ -92,13 +92,51 @@ describe('ollamaService.buildPrompt', () => {
     expect(prompt).toContain('"categoryId": 3');
   });
 
+  it('restricts categoryName to the provided list entries', () => {
+    const prompt = buildPrompt(baseExpense, CATEGORIES);
+    expect(prompt).toContain('Never invent or alter category names');
+    expect(prompt).toContain('"Groceries"');
+    expect(prompt).toContain('"Restaurants"');
+    expect(prompt).toContain('"Fuel"');
+    expect(prompt).toContain('"Public Transit"');
+    expect(prompt).toContain('"Movies"');
+  });
+
+  it('adds explicit guidance to avoid food categories for furniture-like titles', () => {
+    const prompt = buildPrompt(baseExpense, CATEGORIES);
+    expect(prompt).toContain('For household/furniture item titles');
+    expect(prompt).toContain('Schrank, Tisch, Stuhl');
+    expect(prompt).toContain('"Groceries"');
+    expect(prompt).toContain('"Restaurants"');
+  });
+
+  it('uses runtime category IDs in few-shot examples (no hardcoded IDs)', () => {
+    const customCategories = [
+      { id: 11, grouping: 'Food', name: 'Groceries' },
+      { id: 42, grouping: 'Transport', name: 'Fuel' },
+    ];
+    const prompt = buildPrompt(baseExpense, customCategories);
+    expect(prompt).toContain('"categoryName": "Groceries"');
+    expect(prompt).toContain('"categoryId": 11');
+    expect(prompt).toContain('"categoryName": "Fuel"');
+    expect(prompt).toContain('"categoryId": 42');
+  });
+
+  it('omits few-shot examples when insufficient distinct categories exist', () => {
+    const oneCategory = [{ id: 9, grouping: 'Misc', name: 'Other' }];
+    const prompt = buildPrompt(baseExpense, oneCategory);
+    expect(prompt).not.toContain('Few-shot examples');
+    expect(prompt).toContain('Choose exactly one category from the provided list');
+  });
+
   it('requires reasoning first and categoryName before categoryId in JSON output', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     expect(prompt).toContain('JSON key order is mandatory');
     expect(prompt).toContain('"reasoning" first, then "categoryName", then "categoryId"');
-    const reasoningIdx = prompt.indexOf('"reasoning":');
-    const categoryNameIdx = prompt.indexOf('"categoryName":');
-    const categoryIdIdx = prompt.indexOf('"categoryId":');
+    const outputFormatSection = prompt.slice(prompt.lastIndexOf('{\n  "reasoning": "<short explanation>"'));
+    const reasoningIdx = outputFormatSection.indexOf('"reasoning":');
+    const categoryNameIdx = outputFormatSection.indexOf('"categoryName":');
+    const categoryIdIdx = outputFormatSection.indexOf('"categoryId":');
     expect(reasoningIdx).toBeGreaterThan(-1);
     expect(categoryNameIdx).toBeGreaterThan(reasoningIdx);
     expect(categoryIdIdx).toBeGreaterThan(categoryNameIdx);
