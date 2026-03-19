@@ -42,7 +42,7 @@ async function healthCheck() {
  */
 function buildPrompt(expense, categories) {
   const categoryList = categories
-    .map((c) => `  - id ${c.id}: [${c.grouping}] ${c.name}`)
+    .map((c) => `- [ID: ${c.id}] ${c.name} (Group: ${c.grouping})`)
     .join('\n');
 
   const amountFormatted = expense.currency
@@ -54,13 +54,36 @@ function buildPrompt(expense, categories) {
       ? `\nNotes: ${expense.notes.trim()}`
       : '';
 
-  return `You are an expense categorization assistant for Spliit.
+  return `System: You are an expense categorization assistant for Spliit.
+You must always return valid JSON only.
 
 Rules:
 1) Choose exactly one category from the provided list.
-2) categoryId and categoryName must refer to the same list entry. categoryName must exactly match the selected category text.
+2) categoryName must exactly match one list entry name. categoryId must be the exact ID of that same entry.
 3) Expense titles and notes are often in German (for example: Edeka, Tankstelle). Interpret German context correctly before mapping to a category.
 4) If uncertain, pick the best matching category and lower confidence.
+5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
+
+Few-shot examples (follow this mapping behavior exactly):
+Example 1:
+Input expense title: "Edeka"
+Correct output:
+{
+  "reasoning": "Edeka is a German supermarket merchant, so this is a grocery expense.",
+  "categoryName": "Groceries",
+  "categoryId": 1,
+  "confidence": 0.91
+}
+
+Example 2:
+Input expense title: "Tankstelle"
+Correct output:
+{
+  "reasoning": "Tankstelle means gas station in German, so this maps to fuel expenses.",
+  "categoryName": "Fuel",
+  "categoryId": 3,
+  "confidence": 0.93
+}
 
 Expense:
   Title: ${expense.title}
@@ -71,10 +94,10 @@ ${categoryList}
 
 Respond ONLY with valid JSON in this exact format:
 {
-  "categoryId": <integer id from the list above>,
+  "reasoning": "<short explanation>",
   "categoryName": "<exact category name from the list above>",
-  "confidence": <float between 0 and 1>,
-  "reasoning": "<short explanation>"
+  "categoryId": <integer id from the list above that exactly matches categoryName>,
+  "confidence": <float between 0 and 1>
 }
 No markdown, no extra keys.`;
 }

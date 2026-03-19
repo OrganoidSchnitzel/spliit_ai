@@ -40,10 +40,10 @@ describe('ollamaService.buildPrompt', () => {
     expect(prompt).toContain('EUR');
   });
 
-  it('lists all categories with their ids', () => {
+  it('lists all categories with their ids in strict ID format', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     CATEGORIES.forEach((c) => {
-      expect(prompt).toContain(`id ${c.id}`);
+      expect(prompt).toContain(`[ID: ${c.id}]`);
       expect(prompt).toContain(c.name);
       expect(prompt).toContain(c.grouping);
     });
@@ -70,7 +70,7 @@ describe('ollamaService.buildPrompt', () => {
   it('enforces categoryId/categoryName consistency and no extra keys', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     expect(prompt).toContain('Choose exactly one category from the provided list');
-    expect(prompt).toContain('categoryId and categoryName must refer to the same list entry');
+    expect(prompt).toContain('categoryName must exactly match one list entry name');
     expect(prompt).toContain('No markdown, no extra keys');
   });
 
@@ -79,6 +79,29 @@ describe('ollamaService.buildPrompt', () => {
     expect(prompt).toContain('often in German');
     expect(prompt).toContain('Edeka, Tankstelle');
     expect(prompt).toContain('Interpret German context correctly');
+  });
+
+  it('includes few-shot examples for Edeka and Tankstelle with correct ID-name mapping', () => {
+    const prompt = buildPrompt(baseExpense, CATEGORIES);
+    expect(prompt).toContain('Few-shot examples');
+    expect(prompt).toContain('Input expense title: "Edeka"');
+    expect(prompt).toContain('"categoryName": "Groceries"');
+    expect(prompt).toContain('"categoryId": 1');
+    expect(prompt).toContain('Input expense title: "Tankstelle"');
+    expect(prompt).toContain('"categoryName": "Fuel"');
+    expect(prompt).toContain('"categoryId": 3');
+  });
+
+  it('requires reasoning first and categoryName before categoryId in JSON output', () => {
+    const prompt = buildPrompt(baseExpense, CATEGORIES);
+    expect(prompt).toContain('JSON key order is mandatory');
+    expect(prompt).toContain('"reasoning" first, then "categoryName", then "categoryId"');
+    const reasoningIdx = prompt.indexOf('"reasoning":');
+    const categoryNameIdx = prompt.indexOf('"categoryName":');
+    const categoryIdIdx = prompt.indexOf('"categoryId":');
+    expect(reasoningIdx).toBeGreaterThan(-1);
+    expect(categoryNameIdx).toBeGreaterThan(reasoningIdx);
+    expect(categoryIdIdx).toBeGreaterThan(categoryNameIdx);
   });
 
   it('handles missing currency gracefully', () => {
