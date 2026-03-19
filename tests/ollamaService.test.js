@@ -10,6 +10,8 @@ const {
   buildPrompt,
   suggestCategory,
   extractFirstJsonObject,
+  stripThinkingTags,
+  getRawModelText,
   isGroceryLikeCategory,
   applyGroceryMerchantOverride,
   applyFurnitureTitleOverride,
@@ -207,6 +209,61 @@ describe('ollamaService.suggestCategory', () => {
     expect(res.categoryId).toBe(1);
     expect(res.categoryName).toBe('Groceries');
     expect(res.confidence).toBe(0.8);
+  });
+
+  it('parses JSON when model emits <think> wrapper before answer', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        response:
+          '<think>I should reason step by step here.</think>\n```json\n{"reasoning":"Merchant is grocery.","categoryName":"Groceries","categoryId":1,"confidence":0.77}\n```',
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-2c', title: 'Rewe', amount: 5100, notes: '', currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryId).toBe(1);
+    expect(res.categoryName).toBe('Groceries');
+    expect(res.confidence).toBe(0.77);
+  });
+
+  it('parses nested JSON string response payloads', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        response: '"{\\"reasoning\\":\\"double encoded\\",\\"categoryName\\":\\"Fuel\\",\\"categoryId\\":3,\\"confidence\\":0.66}"',
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-2d', title: 'Tankstelle', amount: 3300, notes: '', currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryId).toBe(3);
+    expect(res.categoryName).toBe('Fuel');
+    expect(res.confidence).toBe(0.66);
+  });
+
+  it('reads raw text from chat-style message.content response shape', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        message: {
+          content:
+            '<think>analysis</think>{"reasoning":"chat shape","categoryName":"Groceries","categoryId":1,"confidence":0.61}',
+        },
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-2e', title: 'Aldi', amount: 1800, notes: '', currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryId).toBe(1);
+    expect(res.categoryName).toBe('Groceries');
+    expect(res.confidence).toBe(0.61);
   });
 
   it('rejects mismatched categoryId/categoryName', async () => {
@@ -422,5 +479,29 @@ describe('ollamaService.extractFirstJsonObject', () => {
     expect(extractFirstJsonObject(raw)).toBe(
       '{"reasoning":"text with {brace} inside","categoryName":"Groceries","categoryId":1,"confidence":0.7}'
     );
+  });
+
+  it('removes think tags and returns first complete JSON object', () => {
+    const raw =
+      '<think>chain of thought</think> Before output {"reasoning":"ok","categoryName":"Fuel","categoryId":3,"confidence":0.71} trailing';
+    expect(extractFirstJsonObject(raw)).toBe(
+      '{"reasoning":"ok","categoryName":"Fuel","categoryId":3,"confidence":0.71}'
+    );
+  });
+});
+
+describe('ollamaService.stripThinkingTags', () => {
+  it('removes think blocks while leaving remaining text intact', () => {
+    expect(stripThinkingTags('<think>abc</think> {"a":1}')).toBe('{"a":1}');
+  });
+});
+
+describe('ollamaService.getRawModelText', () => {
+  it('prefers data.response when present', () => {
+    expect(getRawModelText({ response: 'abc', message: { content: 'ignored' } })).toBe('abc');
+  });
+
+  it('falls back to chat-style data.message.content', () => {
+    expect(getRawModelText({ message: { content: 'xyz' } })).toBe('xyz');
   });
 });

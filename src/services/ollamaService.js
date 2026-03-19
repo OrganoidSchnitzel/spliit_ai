@@ -162,8 +162,16 @@ No markdown, no extra keys.`;
 function stripMarkdown(text) {
   return text
     .replace(/```(?:json)?/gi, '')
-    .replace(/```/g, '')
     .trim();
+}
+
+/**
+ * Remove common reasoning/thinking wrapper tags emitted by some models.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripThinkingTags(text) {
+  return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
 /**
@@ -173,7 +181,7 @@ function stripMarkdown(text) {
  * @returns {string}
  */
 function extractFirstJsonObject(text) {
-  const cleaned = stripMarkdown(text || '');
+  const cleaned = stripThinkingTags(stripMarkdown(text || ''));
   const firstBraceIndex = cleaned.search(/\{/);
   if (firstBraceIndex < 0) return cleaned;
 
@@ -208,6 +216,27 @@ function extractFirstJsonObject(text) {
   }
 
   return cleaned.slice(firstBraceIndex).trim();
+}
+
+/**
+ * Normalize potential response locations/shapes from Ollama into a string.
+ * @param {any} data
+ * @returns {string}
+ */
+function getRawModelText(data) {
+  if (!data) return '';
+  const candidate =
+    data.response !== undefined
+      ? data.response
+      : data.message && data.message.content !== undefined
+        ? data.message.content
+        : '';
+  if (typeof candidate === 'string') return candidate;
+  try {
+    return JSON.stringify(candidate);
+  } catch {
+    return String(candidate || '');
+  }
 }
 
 /**
@@ -398,14 +427,26 @@ async function suggestCategory(expense, categories) {
     throw new Error(`Ollama request failed: ${err.message}`);
   }
 
-  const raw = (response.data && response.data.response) || '';
-  const cleaned = extractFirstJsonObject(raw);
+  const raw = getRawModelText(response.data);
+  const normalizedRaw = stripThinkingTags(stripMarkdown(raw || ''));
+  const cleaned = extractFirstJsonObject(normalizedRaw);
 
   let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new Error(`Failed to parse Ollama response as JSON: ${cleaned.substring(0, 200)}`);
+    try {
+      parsed = JSON.parse(normalizedRaw);
+    } catch {
+      throw new Error(`Failed to parse Ollama response as JSON: ${cleaned.substring(0, 200)}`);
+    }
+  }
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new Error(`Failed to parse nested Ollama JSON response: ${parsed.substring(0, 200)}`);
+    }
   }
 
   const parsedKeys = Object.keys(parsed).sort();
@@ -466,7 +507,9 @@ module.exports = {
   suggestCategory,
   buildPrompt,
   stripMarkdown,
+  stripThinkingTags,
   extractFirstJsonObject,
+  getRawModelText,
   isGroceryLikeCategory,
   applyGroceryMerchantOverride,
   isFurnitureLikeCategory,
