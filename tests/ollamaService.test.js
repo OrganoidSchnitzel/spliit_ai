@@ -6,7 +6,12 @@ const mockPost = jest.fn();
 const mockGet = jest.fn();
 axios.create.mockReturnValue({ post: mockPost, get: mockGet });
 
-const { buildPrompt, suggestCategory } = require('../src/services/ollamaService');
+const {
+  buildPrompt,
+  suggestCategory,
+  applyFurnitureTitleOverride,
+  applyTitleSemanticGuard,
+} = require('../src/services/ollamaService');
 
 const CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -77,7 +82,7 @@ describe('ollamaService.buildPrompt', () => {
   it('includes explicit German-language guidance', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     expect(prompt).toContain('often in German');
-    expect(prompt).toContain('Edeka, Tankstelle');
+    expect(prompt).toContain('Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle');
     expect(prompt).toContain('Interpret German context correctly');
   });
 
@@ -211,5 +216,114 @@ describe('ollamaService.suggestCategory', () => {
         CATEGORIES
       )
     ).rejects.toThrow('mismatched categoryId/categoryName');
+  });
+
+  it('down-ranks overconfident non-home suggestion for furniture-like title', async () => {
+    const categories = [
+      { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
+      { id: 5, grouping: 'Entertainment', name: 'Entertainment' },
+    ];
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 5,
+          categoryName: 'Entertainment',
+          confidence: 0.9,
+          reasoning: 'Category matches title and German context',
+        }),
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-4', title: 'Schrank', amount: 8000, notes: '', currency: 'EUR' },
+      categories
+    );
+
+    expect(res.categoryId).toBe(5);
+    expect(res.categoryName).toBe('Entertainment');
+    expect(res.confidence).toBe(0.39);
+    expect(res.reasoning).toContain('Heuristic note');
+  });
+
+  it('maps Schrank suggestion to Möbel/Furniture category when available', async () => {
+    const categories = [
+      { id: 5, grouping: 'Entertainment', name: 'Entertainment' },
+      { id: 9, grouping: 'Home', name: 'Möbel' },
+    ];
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 5,
+          categoryName: 'Entertainment',
+          confidence: 0.9,
+          reasoning: 'Category matches title and German context',
+        }),
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-5', title: 'Schrank', amount: 8000, notes: '', currency: 'EUR' },
+      categories
+    );
+
+    expect(res.categoryId).toBe(9);
+    expect(res.categoryName).toBe('Möbel');
+    expect(res.confidence).toBe(0.9);
+    expect(res.reasoning).toContain('mapped to "Möbel"');
+  });
+
+  it('maps IKEA suggestion to furniture category when available', async () => {
+    const categories = [
+      { id: 2, grouping: 'Entertainment', name: 'Movies' },
+      { id: 7, grouping: 'Home', name: 'Furniture' },
+    ];
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 2,
+          categoryName: 'Movies',
+          confidence: 0.72,
+          reasoning: 'guess',
+        }),
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-6', title: 'IKEA', amount: 12000, notes: '', currency: 'EUR' },
+      categories
+    );
+
+    expect(res.categoryId).toBe(7);
+    expect(res.categoryName).toBe('Furniture');
+    expect(res.confidence).toBe(0.72);
+  });
+});
+
+describe('ollamaService.applyTitleSemanticGuard', () => {
+  it('keeps confidence for furniture-like title when selected category is home-like', () => {
+    const suggestion = {
+      categoryId: 8,
+      categoryName: 'Furniture',
+      confidence: 0.9,
+      reasoning: 'Looks like household expense',
+    };
+    const categories = [{ id: 8, grouping: 'Home', name: 'Furniture' }];
+    const guarded = applyTitleSemanticGuard({ title: 'Schrank' }, suggestion, categories);
+    expect(guarded.confidence).toBe(0.9);
+    expect(guarded.reasoning).toBe('Looks like household expense');
+  });
+});
+
+describe('ollamaService.applyFurnitureTitleOverride', () => {
+  it('does not change suggestion when no furniture category exists', () => {
+    const suggestion = {
+      categoryId: 2,
+      categoryName: 'Entertainment',
+      confidence: 0.8,
+      reasoning: 'model guess',
+    };
+    const categories = [{ id: 2, grouping: 'Entertainment', name: 'Entertainment' }];
+    const out = applyFurnitureTitleOverride({ title: 'Schrank' }, suggestion, categories);
+    expect(out).toEqual(suggestion);
   });
 });

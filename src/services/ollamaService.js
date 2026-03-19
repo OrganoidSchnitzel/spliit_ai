@@ -19,6 +19,7 @@ const OLLAMA_RESPONSE_SCHEMA = {
     reasoning: { type: 'string' },
   },
 };
+const MAX_FURNITURE_NON_HOME_CONFIDENCE = 0.39;
 
 /**
  * Check that the Ollama service is reachable and the configured model is available.
@@ -112,7 +113,7 @@ You must always return valid JSON only.
 Rules:
 1) Choose exactly one category from the provided list.
 2) categoryName must exactly match one list entry name. categoryId must be the exact ID of that same entry.
-3) Expense titles and notes are often in German (for example: Edeka, Tankstelle). Interpret German context correctly before mapping to a category.
+3) Expense titles and notes are often in German (for example: Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle). Interpret German context correctly before mapping to a category.
 4) If uncertain, pick the best matching category and lower confidence.
 5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
 6) Never invent or alter category names. categoryName MUST be one of: ${allowedNames}.
@@ -149,6 +150,124 @@ function stripMarkdown(text) {
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
     .trim();
+}
+
+/**
+ * Check whether a category appears furniture/home related.
+ * @param {{ grouping?: string, name?: string }} category
+ * @returns {boolean}
+ */
+function isFurnitureLikeCategory(category) {
+  const text = `${category && category.grouping ? category.grouping : ''} ${
+    category && category.name ? category.name : ''
+  }`.toLowerCase();
+  return /möbel|moebel|furniture|home|household|living|interior|wohnung|wohnen/.test(text);
+}
+
+/**
+ * For clearly furniture-related titles/merchants (e.g., Schrank, IKEA), prefer
+ * a furniture/home category when available.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyFurnitureTitleOverride(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalizedTitle) return suggestion;
+
+  const isFurnitureSignal =
+    normalizedTitle === 'ikea' ||
+    normalizedTitle.startsWith('ikea ') ||
+    normalizedTitle.includes(' ikea ') ||
+    normalizedTitle === 'schrank' ||
+    normalizedTitle.startsWith('schrank ') ||
+    normalizedTitle.includes(' schrank ');
+  if (!isFurnitureSignal) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  if (selectedCategory && isFurnitureLikeCategory(selectedCategory)) return suggestion;
+
+  const primaryFurnitureCategory = categories.find((c) =>
+    /möbel|moebel|furniture/.test(`${c.grouping} ${c.name}`.toLowerCase())
+  );
+  const fallbackFurnitureCategory = categories.find((c) => isFurnitureLikeCategory(c));
+  const furnitureCategory = primaryFurnitureCategory || fallbackFurnitureCategory;
+  if (!furnitureCategory) return suggestion;
+
+  return {
+    ...suggestion,
+    categoryId: furnitureCategory.id,
+    categoryName: furnitureCategory.name,
+    confidence: suggestion.confidence,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is furniture/home related, so the suggestion was mapped to "${furnitureCategory.name}".`,
+  };
+}
+
+/**
+ * Apply a conservative confidence guard for known ambiguous furniture-like titles
+ * to avoid overconfident non-home classifications.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyTitleSemanticGuard(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalizedTitle) return suggestion;
+
+  const furnitureKeywords = [
+    'schrank',
+    'tisch',
+    'stuhl',
+    'sofa',
+    'bett',
+    'kommode',
+    'regal',
+    'schreibtisch',
+    'lampe',
+    'möbel',
+    'moebel',
+  ];
+  const isFurnitureLikeTitle = furnitureKeywords.some(
+    (keyword) =>
+      normalizedTitle === keyword ||
+      normalizedTitle.startsWith(`${keyword} `) ||
+      normalizedTitle.includes(` ${keyword} `)
+  );
+
+  if (!isFurnitureLikeTitle) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  const isHomeLikeCategory =
+    isFurnitureLikeCategory(selectedCategory || { grouping: '', name: suggestion.categoryName }) ||
+    /renovat|diy|hardware|bau|garden/.test(
+      `${selectedCategory ? selectedCategory.grouping : ''} ${
+        selectedCategory ? selectedCategory.name : suggestion.categoryName
+      }`.toLowerCase()
+    );
+  if (isHomeLikeCategory) return suggestion;
+
+  const guardedConfidence = Math.min(
+    suggestion.confidence,
+    MAX_FURNITURE_NON_HOME_CONFIDENCE
+  );
+  if (guardedConfidence === suggestion.confidence) return suggestion;
+
+  return {
+    ...suggestion,
+    confidence: guardedConfidence,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is typically a furniture/household item, so non-home categories were down-ranked.`,
+  };
 }
 
 /**
@@ -226,12 +345,22 @@ async function suggestCategory(expense, categories) {
     );
   }
 
-  return {
+  const baseSuggestion = {
     categoryId,
     categoryName,
     confidence,
     reasoning,
   };
+  const overridden = applyFurnitureTitleOverride(expense, baseSuggestion, categories);
+  return applyTitleSemanticGuard(expense, overridden, categories);
 }
 
-module.exports = { healthCheck, suggestCategory, buildPrompt, stripMarkdown };
+module.exports = {
+  healthCheck,
+  suggestCategory,
+  buildPrompt,
+  stripMarkdown,
+  isFurnitureLikeCategory,
+  applyFurnitureTitleOverride,
+  applyTitleSemanticGuard,
+};
