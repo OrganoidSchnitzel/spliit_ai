@@ -8,6 +8,18 @@ const client = axios.create({
   timeout: config.ollama.timeoutMs,
 });
 
+const OLLAMA_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['categoryId', 'categoryName', 'confidence', 'reasoning'],
+  properties: {
+    categoryId: { type: 'integer' },
+    categoryName: { type: 'string' },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    reasoning: { type: 'string' },
+  },
+};
+
 /**
  * Check that the Ollama service is reachable and the configured model is available.
  * @returns {{ ok: boolean, models: string[] }}
@@ -42,7 +54,13 @@ function buildPrompt(expense, categories) {
       ? `\nNotes: ${expense.notes.trim()}`
       : '';
 
-  return `You are an expense categorization assistant. Given an expense and a list of categories, select the most appropriate category.
+  return `You are an expense categorization assistant for Spliit.
+
+Rules:
+1) Choose exactly one category from the provided list.
+2) categoryId and categoryName must refer to the same list entry. categoryName must exactly match the selected category text.
+3) Expense titles and notes are often in German (for example: Edeka, Tankstelle). Interpret German context correctly before mapping to a category.
+4) If uncertain, pick the best matching category and lower confidence.
 
 Expense:
   Title: ${expense.title}
@@ -54,9 +72,11 @@ ${categoryList}
 Respond ONLY with valid JSON in this exact format:
 {
   "categoryId": <integer id from the list above>,
+  "categoryName": "<exact category name from the list above>",
   "confidence": <float between 0 and 1>,
   "reasoning": "<short explanation>"
-}`;
+}
+No markdown, no extra keys.`;
 }
 
 /**
@@ -75,7 +95,7 @@ function stripMarkdown(text) {
  * Ask Ollama to suggest a category for the given expense.
  * @param {{ id: string, title: string, amount: number, notes?: string, currency?: string }} expense
  * @param {Array<{ id: number, grouping: string, name: string }>} categories
- * @returns {{ categoryId: number, confidence: number, reasoning: string }}
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
  */
 async function suggestCategory(expense, categories) {
   const prompt = buildPrompt(expense, categories);
@@ -84,7 +104,7 @@ async function suggestCategory(expense, categories) {
     model: config.ollama.model,
     prompt,
     stream: false,
-    format: 'json',
+    format: OLLAMA_RESPONSE_SCHEMA,
   };
 
   let response;
@@ -104,27 +124,53 @@ async function suggestCategory(expense, categories) {
     throw new Error(`Failed to parse Ollama response as JSON: ${cleaned.substring(0, 200)}`);
   }
 
+  const parsedKeys = Object.keys(parsed).sort();
+  const expectedKeys = ['categoryId', 'categoryName', 'confidence', 'reasoning'];
+  if (
+    parsedKeys.length !== expectedKeys.length ||
+    expectedKeys.some((key, idx) => key !== parsedKeys[idx])
+  ) {
+    throw new Error(
+      `Invalid response shape from Ollama. Expected keys: ${expectedKeys.join(', ')}`
+    );
+  }
+
   const categoryId = parseInt(parsed.categoryId, 10);
+  const categoryName =
+    typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '';
   const confidence = parseFloat(parsed.confidence);
+  const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning : '';
 
   if (!Number.isFinite(categoryId) || categoryId <= 0) {
     throw new Error(`Invalid categoryId in Ollama response: ${parsed.categoryId}`);
   }
+  if (!categoryName) {
+    throw new Error(`Invalid categoryName in Ollama response: ${parsed.categoryName}`);
+  }
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     throw new Error(`Invalid confidence in Ollama response: ${parsed.confidence}`);
   }
+  if (typeof parsed.reasoning !== 'string') {
+    throw new Error(`Invalid reasoning in Ollama response: ${parsed.reasoning}`);
+  }
 
-  const validIds = new Set(categories.map((c) => c.id));
-  if (!validIds.has(categoryId)) {
+  const categoryEntry = categories.find((c) => c.id === categoryId);
+  if (!categoryEntry) {
     throw new Error(
       `Ollama returned categoryId ${categoryId} which is not in the list of valid categories`
+    );
+  }
+  if (categoryName !== categoryEntry.name) {
+    throw new Error(
+      `Ollama returned mismatched categoryId/categoryName: ${categoryId} -> "${categoryEntry.name}", got "${categoryName}"`
     );
   }
 
   return {
     categoryId,
+    categoryName,
     confidence,
-    reasoning: parsed.reasoning || '',
+    reasoning,
   };
 }
 
