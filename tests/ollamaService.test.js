@@ -9,6 +9,8 @@ axios.create.mockReturnValue({ post: mockPost, get: mockGet });
 const {
   buildPrompt,
   suggestCategory,
+  isGroceryLikeCategory,
+  applyGroceryMerchantOverride,
   applyFurnitureTitleOverride,
   applyTitleSemanticGuard,
 } = require('../src/services/ollamaService');
@@ -297,6 +299,33 @@ describe('ollamaService.suggestCategory', () => {
     expect(res.categoryName).toBe('Furniture');
     expect(res.confidence).toBe(0.72);
   });
+
+  it('maps Lidl suggestion to groceries category when available', async () => {
+    const categories = [
+      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
+      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
+    ];
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 2,
+          categoryName: 'Entertainment',
+          confidence: 0.8,
+          reasoning: 'Lidl is a grocery store, a type of food and drink category.',
+        }),
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-7', title: 'Lidl', amount: 2332, notes: '', currency: 'EUR' },
+      categories
+    );
+
+    expect(res.categoryId).toBe(11);
+    expect(res.categoryName).toBe('Groceries');
+    expect(res.confidence).toBe(0.8);
+    expect(res.reasoning).toContain('known grocery merchant');
+  });
 });
 
 describe('ollamaService.applyTitleSemanticGuard', () => {
@@ -325,5 +354,46 @@ describe('ollamaService.applyFurnitureTitleOverride', () => {
     const categories = [{ id: 2, grouping: 'Entertainment', name: 'Entertainment' }];
     const out = applyFurnitureTitleOverride({ title: 'Schrank' }, suggestion, categories);
     expect(out).toEqual(suggestion);
+  });
+});
+
+describe('ollamaService.isGroceryLikeCategory', () => {
+  it('matches grocery category and excludes restaurants', () => {
+    expect(isGroceryLikeCategory({ grouping: 'Food & Drink', name: 'Groceries' })).toBe(true);
+    expect(isGroceryLikeCategory({ grouping: 'Food & Drink', name: 'Restaurants' })).toBe(false);
+  });
+});
+
+describe('ollamaService.applyGroceryMerchantOverride', () => {
+  it('maps known grocery merchant title from entertainment to groceries', () => {
+    const suggestion = {
+      categoryId: 2,
+      categoryName: 'Entertainment',
+      confidence: 0.8,
+      reasoning: 'Lidl is a grocery store',
+    };
+    const categories = [
+      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
+      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
+    ];
+    const out = applyGroceryMerchantOverride({ title: 'Lidl' }, suggestion, categories);
+    expect(out.categoryId).toBe(11);
+    expect(out.categoryName).toBe('Groceries');
+  });
+
+  it('matches merchant keywords at end of title', () => {
+    const suggestion = {
+      categoryId: 2,
+      categoryName: 'Entertainment',
+      confidence: 0.8,
+      reasoning: 'model guess',
+    };
+    const categories = [
+      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
+      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
+    ];
+    const out = applyGroceryMerchantOverride({ title: 'Shopping at Lidl' }, suggestion, categories);
+    expect(out.categoryId).toBe(11);
+    expect(out.categoryName).toBe('Groceries');
   });
 });

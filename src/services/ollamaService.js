@@ -20,6 +20,20 @@ const OLLAMA_RESPONSE_SCHEMA = {
   },
 };
 const MAX_FURNITURE_NON_HOME_CONFIDENCE = 0.39;
+const GROCERY_MERCHANT_KEYWORDS = ['lidl', 'rewe', 'edeka', 'aldi', 'kaufland'];
+const FURNITURE_TITLE_KEYWORDS = [
+  'schrank',
+  'tisch',
+  'stuhl',
+  'sofa',
+  'bett',
+  'kommode',
+  'regal',
+  'schreibtisch',
+  'lampe',
+  'möbel',
+  'moebel',
+];
 
 /**
  * Check that the Ollama service is reachable and the configured model is available.
@@ -153,6 +167,74 @@ function stripMarkdown(text) {
 }
 
 /**
+ * Check whether a normalized title contains a keyword as a standalone token.
+ * @param {string} normalizedTitle
+ * @param {string} keyword
+ * @returns {boolean}
+ */
+function hasTitleKeyword(normalizedTitle, keyword) {
+  return (
+    normalizedTitle === keyword ||
+    normalizedTitle.startsWith(`${keyword} `) ||
+    normalizedTitle.endsWith(` ${keyword}`) ||
+    normalizedTitle.includes(` ${keyword} `)
+  );
+}
+
+/**
+ * Check whether a category appears grocery/supermarket related.
+ * @param {{ grouping?: string, name?: string }} category
+ * @returns {boolean}
+ */
+function isGroceryLikeCategory(category) {
+  const text = `${category && category.grouping ? category.grouping : ''} ${
+    category && category.name ? category.name : ''
+  }`.toLowerCase();
+  const isGroceryLike = /grocer|grocery|supermarket|lebensmittel/.test(text);
+  const isRestaurantLike = /restaurant|dining|cafe|bar|take.?away|delivery/.test(text);
+  return isGroceryLike && !isRestaurantLike;
+}
+
+/**
+ * For clear grocery merchants (e.g., Lidl/Rewe/Edeka), prefer a grocery/supermarket
+ * category when available.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyGroceryMerchantOverride(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalizedTitle) return suggestion;
+
+  const isGroceryMerchantSignal = GROCERY_MERCHANT_KEYWORDS.some((keyword) =>
+    hasTitleKeyword(normalizedTitle, keyword)
+  );
+  if (!isGroceryMerchantSignal) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  if (selectedCategory && isGroceryLikeCategory(selectedCategory)) return suggestion;
+
+  const groceryCategory = categories.find((c) =>
+    /grocer|grocery|supermarket|lebensmittel/.test(`${c.grouping} ${c.name}`.toLowerCase())
+  );
+  const fallbackGroceryCategory = categories.find((c) => isGroceryLikeCategory(c));
+  const preferredCategory = groceryCategory || fallbackGroceryCategory;
+  if (!preferredCategory) return suggestion;
+
+  return {
+    ...suggestion,
+    categoryId: preferredCategory.id,
+    categoryName: preferredCategory.name,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is a known grocery merchant, so the suggestion was mapped to "${preferredCategory.name}".`,
+  };
+}
+
+/**
  * Check whether a category appears furniture/home related.
  * @param {{ grouping?: string, name?: string }} category
  * @returns {boolean}
@@ -181,12 +263,7 @@ function applyFurnitureTitleOverride(expense, suggestion, categories) {
   if (!normalizedTitle) return suggestion;
 
   const isFurnitureSignal =
-    normalizedTitle === 'ikea' ||
-    normalizedTitle.startsWith('ikea ') ||
-    normalizedTitle.includes(' ikea ') ||
-    normalizedTitle === 'schrank' ||
-    normalizedTitle.startsWith('schrank ') ||
-    normalizedTitle.includes(' schrank ');
+    hasTitleKeyword(normalizedTitle, 'ikea') || hasTitleKeyword(normalizedTitle, 'schrank');
   if (!isFurnitureSignal) return suggestion;
 
   const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
@@ -225,24 +302,8 @@ function applyTitleSemanticGuard(expense, suggestion, categories) {
 
   if (!normalizedTitle) return suggestion;
 
-  const furnitureKeywords = [
-    'schrank',
-    'tisch',
-    'stuhl',
-    'sofa',
-    'bett',
-    'kommode',
-    'regal',
-    'schreibtisch',
-    'lampe',
-    'möbel',
-    'moebel',
-  ];
-  const isFurnitureLikeTitle = furnitureKeywords.some(
-    (keyword) =>
-      normalizedTitle === keyword ||
-      normalizedTitle.startsWith(`${keyword} `) ||
-      normalizedTitle.includes(` ${keyword} `)
+  const isFurnitureLikeTitle = FURNITURE_TITLE_KEYWORDS.some((keyword) =>
+    hasTitleKeyword(normalizedTitle, keyword)
   );
 
   if (!isFurnitureLikeTitle) return suggestion;
@@ -351,8 +412,9 @@ async function suggestCategory(expense, categories) {
     confidence,
     reasoning,
   };
-  const overridden = applyFurnitureTitleOverride(expense, baseSuggestion, categories);
-  return applyTitleSemanticGuard(expense, overridden, categories);
+  const groceryAdjusted = applyGroceryMerchantOverride(expense, baseSuggestion, categories);
+  const furnitureAdjusted = applyFurnitureTitleOverride(expense, groceryAdjusted, categories);
+  return applyTitleSemanticGuard(expense, furnitureAdjusted, categories);
 }
 
 module.exports = {
@@ -360,6 +422,8 @@ module.exports = {
   suggestCategory,
   buildPrompt,
   stripMarkdown,
+  isGroceryLikeCategory,
+  applyGroceryMerchantOverride,
   isFurnitureLikeCategory,
   applyFurnitureTitleOverride,
   applyTitleSemanticGuard,
