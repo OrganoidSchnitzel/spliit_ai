@@ -161,9 +161,53 @@ No markdown, no extra keys.`;
  */
 function stripMarkdown(text) {
   return text
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
     .trim();
+}
+
+/**
+ * Extract the first complete top-level JSON object from noisy model output.
+ * Handles conversational filler around JSON and ignores braces inside strings.
+ * @param {string} text
+ * @returns {string}
+ */
+function extractFirstJsonObject(text) {
+  const cleaned = stripMarkdown(text || '');
+  const firstBraceIndex = cleaned.search(/\{/);
+  if (firstBraceIndex < 0) return cleaned;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = firstBraceIndex; i < cleaned.length; i += 1) {
+    const ch = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return cleaned.slice(firstBraceIndex, i + 1).trim();
+      }
+    }
+  }
+
+  return cleaned.slice(firstBraceIndex).trim();
 }
 
 /**
@@ -344,7 +388,7 @@ async function suggestCategory(expense, categories) {
     model: config.ollama.model,
     prompt,
     stream: false,
-    format: OLLAMA_RESPONSE_SCHEMA,
+    format: 'json',
   };
 
   let response;
@@ -355,7 +399,7 @@ async function suggestCategory(expense, categories) {
   }
 
   const raw = (response.data && response.data.response) || '';
-  const cleaned = stripMarkdown(raw);
+  const cleaned = extractFirstJsonObject(raw);
 
   let parsed;
   try {
@@ -422,6 +466,7 @@ module.exports = {
   suggestCategory,
   buildPrompt,
   stripMarkdown,
+  extractFirstJsonObject,
   isGroceryLikeCategory,
   applyGroceryMerchantOverride,
   isFurnitureLikeCategory,

@@ -9,6 +9,7 @@ axios.create.mockReturnValue({ post: mockPost, get: mockGet });
 const {
   buildPrompt,
   suggestCategory,
+  extractFirstJsonObject,
   isGroceryLikeCategory,
   applyGroceryMerchantOverride,
   applyFurnitureTitleOverride,
@@ -162,7 +163,7 @@ describe('ollamaService.suggestCategory', () => {
     jest.clearAllMocks();
   });
 
-  it('uses strict schema format and returns parsed suggestion', async () => {
+  it('uses JSON response format and returns parsed suggestion', async () => {
     mockPost.mockResolvedValue({
       data: {
         response: JSON.stringify({
@@ -187,17 +188,25 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const [, payload] = mockPost.mock.calls[0];
-    expect(payload.format).toEqual({
-      type: 'object',
-      additionalProperties: false,
-      required: ['categoryId', 'categoryName', 'confidence', 'reasoning'],
-      properties: {
-        categoryId: { type: 'integer' },
-        categoryName: { type: 'string' },
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
-        reasoning: { type: 'string' },
+    expect(payload.format).toBe('json');
+  });
+
+  it('parses JSON from markdown/conversational wrapper text', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        response:
+          'Sure, here is the result:\n```json\n{"reasoning":"Lidl is a grocery merchant.","categoryName":"Groceries","categoryId":1,"confidence":0.8}\n```\nAnything else?',
       },
     });
+
+    const res = await suggestCategory(
+      { id: 'exp-2b', title: 'Lidl', amount: 5000, notes: '', currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryId).toBe(1);
+    expect(res.categoryName).toBe('Groceries');
+    expect(res.confidence).toBe(0.8);
   });
 
   it('rejects mismatched categoryId/categoryName', async () => {
@@ -395,5 +404,23 @@ describe('ollamaService.applyGroceryMerchantOverride', () => {
     const out = applyGroceryMerchantOverride({ title: 'Shopping at Lidl' }, suggestion, categories);
     expect(out.categoryId).toBe(11);
     expect(out.categoryName).toBe('Groceries');
+  });
+});
+
+describe('ollamaService.extractFirstJsonObject', () => {
+  it('extracts first complete object from fenced conversational output', () => {
+    const raw =
+      'I can help with that.\n```json\n{"reasoning":"ok","categoryName":"Groceries","categoryId":1,"confidence":0.7}\n```\nDone.';
+    expect(extractFirstJsonObject(raw)).toBe(
+      '{"reasoning":"ok","categoryName":"Groceries","categoryId":1,"confidence":0.7}'
+    );
+  });
+
+  it('ignores braces inside JSON string fields', () => {
+    const raw =
+      'prefix {"reasoning":"text with {brace} inside","categoryName":"Groceries","categoryId":1,"confidence":0.7} suffix';
+    expect(extractFirstJsonObject(raw)).toBe(
+      '{"reasoning":"text with {brace} inside","categoryName":"Groceries","categoryId":1,"confidence":0.7}'
+    );
   });
 });
