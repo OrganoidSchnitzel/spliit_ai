@@ -35,7 +35,7 @@ db.exec(`
     confidence  REAL,
     reasoning   TEXT,
     status      TEXT    NOT NULL,
-    provider    TEXT,
+    provider    TEXT,   -- retained for schema compatibility; always 'ollama'
     processed_at TEXT   NOT NULL DEFAULT (datetime('now'))
   )
 `);
@@ -53,7 +53,6 @@ db.exec(`
  * @param {number}  [params.confidence]
  * @param {string}  [params.reasoning]
  * @param {string}  params.status       - 'applied' | 'low_confidence' | 'error'
- * @param {string}  [params.provider]   - 'ollama' | 'openai'
  */
 function recordResult({
   expenseId,

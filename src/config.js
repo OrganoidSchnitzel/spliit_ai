@@ -14,22 +14,11 @@ const config = {
     ssl: process.env.DB_SSL === 'true',
   },
 
-  // AI provider – 'ollama' (default) or 'openai' (any OpenAI-compatible API)
-  aiProvider: process.env.AI_PROVIDER || 'ollama',
-
-  // Ollama
+  // Ollama (local LLM)
   ollama: {
     baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'llama3.2',
     timeoutMs: parseInt(process.env.OLLAMA_TIMEOUT_MS || '60000', 10),
-  },
-
-  // OpenAI-compatible API (OpenAI, DeepSeek, LiteLLM, Fastchat, etc.)
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY || '',
-    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '60000', 10),
   },
 
   // Minimum confidence (0–1) to auto-apply a suggested category

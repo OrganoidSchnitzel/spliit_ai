@@ -76,13 +76,12 @@ async function loadDashboard() {
     dbEl.textContent = healthRes.database?.ok ? '✔ Connected' : '✘ Disconnected';
     dbEl.className = `status-value ${healthRes.database?.ok ? 'ok' : 'error'}`;
 
-    const aiEl = document.getElementById('status-ai');
-    const aiOk = healthRes.ai?.ok;
-    document.getElementById('status-ai-provider').textContent = healthRes.ai?.provider || '—';
-    aiEl.textContent = aiOk
-      ? `✔ ${healthRes.ai.models?.length ? healthRes.ai.models[0] : 'Ready'}`
+    const ollamaEl = document.getElementById('status-ollama');
+    const ollamaOk = healthRes.ollama?.ok;
+    ollamaEl.textContent = ollamaOk
+      ? `✔ ${healthRes.ollama.models?.length ? healthRes.ollama.models[0] : 'Ready'}`
       : '✘ Unreachable';
-    aiEl.className = `status-value ${aiOk ? 'ok' : 'error'}`;
+    ollamaEl.className = `status-value ${ollamaOk ? 'ok' : 'error'}`;
 
     const schedEl = document.getElementById('status-scheduler');
     schedEl.textContent = healthRes.scheduler?.enabled
@@ -301,7 +300,6 @@ async function loadHistory() {
         <td>${esc(r.category_name || (r.category_id ? `#${r.category_id}` : '—'))}</td>
         <td>${r.confidence != null ? confidenceBadge(r.confidence) : '—'}</td>
         <td>${statusBadge(r.status)}</td>
-        <td>${esc(r.provider || '—')}</td>
       </tr>`).join('');
   } catch (err) {
     console.error('History load error:', err);
@@ -319,19 +317,9 @@ async function loadSettings() {
 
     container.innerHTML = `
       <div class="settings-group">
-        <h3>AI Provider</h3>
-        ${row('Active provider', s.aiProvider)}
-      </div>
-      <div class="settings-group">
         <h3>Ollama</h3>
         ${row('Base URL', s.ollama.baseUrl)}
         ${row('Model', s.ollama.model)}
-      </div>
-      <div class="settings-group">
-        <h3>OpenAI-compatible API</h3>
-        ${row('Base URL', s.openai.baseUrl)}
-        ${row('Model', s.openai.model)}
-        ${row('API Key', s.openai.apiKeySet ? '✔ Set' : '✘ Not set')}
       </div>
       <div class="settings-group">
         <h3>Processing</h3>

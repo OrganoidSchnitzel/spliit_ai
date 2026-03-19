@@ -4,12 +4,14 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 
 ## Features
 
-- **Automatic categorization** – a scheduled job periodically scans uncategorized expenses and assigns the most likely category using Ollama.
+- **Automatic categorization** – a scheduled job periodically scans uncategorized expenses and assigns the most likely category using a local Ollama model.
 - **Confidence threshold** – suggestions below the configured threshold are not applied automatically, preventing low-quality assignments.
 - **Playground** – manually test AI suggestions on any expense before committing changes to the database.
 - **Dashboard** – see the health of all connected services and the list of uncategorized expenses at a glance.
+- **Processing history** – every categorization attempt is logged to a local SQLite database so you can audit what was applied.
 - **REST API** – trigger runs, get suggestions, or apply categories programmatically.
 - **Docker-ready** – a `Dockerfile` and `docker-compose.yml` are included for easy deployment alongside your existing Spliit and Ollama containers.
+- **Unraid-ready** – see [UNRAID_SETUP.md](UNRAID_SETUP.md) for step-by-step instructions.
 
 ---
 
@@ -43,7 +45,7 @@ Spliit AI connects **directly to the same PostgreSQL database** that Spliit uses
 |---------|-------------|
 | Node.js | ≥ 18 |
 | PostgreSQL | Same instance used by Spliit |
-| Ollama | Running with at least one model pulled |
+| Ollama | Running locally with at least one model pulled |
 
 ### 1. Clone and install
 
@@ -57,7 +59,7 @@ npm install
 
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials and Ollama URL
+# Edit .env – set DB_HOST, DB_PASSWORD, OLLAMA_BASE_URL, OLLAMA_MODEL
 ```
 
 Key variables:
@@ -109,6 +111,12 @@ docker compose up -d
 
 ---
 
+## Unraid Installation
+
+For a full step-by-step guide to running Spliit AI on an Unraid server (including finding your Spliit network, building the image, volume mounts, and Ollama GPU setup), see **[UNRAID_SETUP.md](UNRAID_SETUP.md)**.
+
+---
+
 ## API Reference
 
 All endpoints are under `/api`.
@@ -121,6 +129,8 @@ All endpoints are under `/api`.
 | `POST` | `/api/expenses/:id/suggest` | Get an AI suggestion (no DB write) |
 | `POST` | `/api/expenses/:id/apply` | Apply a category to an expense |
 | `POST` | `/api/process` | Manually trigger a batch run |
+| `GET` | `/api/history` | Processing history + aggregate stats |
+| `GET` | `/api/settings` | Current configuration (read-only) |
 
 ### Example: get a suggestion
 
@@ -169,8 +179,9 @@ Tests use [Jest](https://jestjs.io/) with all external services mocked (no live 
 
 1. **Scheduler** fires according to `SCHEDULER_CRON` (default every 15 minutes).
 2. **categorizationService** queries the database for expenses with `categoryId = 0` (uncategorized), up to `BATCH_SIZE`.
-3. For each expense, **ollamaService** builds a prompt containing the expense title, amount, notes, and the full list of available categories, then calls the Ollama `/api/generate` endpoint with `format: "json"` to force structured output.
+3. **ollamaService** builds a prompt containing the expense title, amount, notes, and the full list of available categories, then calls the Ollama `/api/generate` endpoint with `format: "json"` to force structured output.
 4. The response is parsed and validated. If `confidence ≥ CONFIDENCE_THRESHOLD`, the category is written to the database immediately. Otherwise, it is left for manual review via the Playground.
+5. Every attempt (applied, low confidence, or error) is recorded in the **processing history** (SQLite, `data/history.db`).
 
 ---
 

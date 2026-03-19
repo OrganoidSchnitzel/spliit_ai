@@ -18,20 +18,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-}
       DB_SSL: ${DB_SSL:-false}
 
-      # ── AI provider: 'ollama' (default) or 'openai' ───────────────────────
-      AI_PROVIDER: ${AI_PROVIDER:-ollama}
-
-      # ── Ollama (active when AI_PROVIDER=ollama) ───────────────────────────
+      # ── Ollama (local LLM) ────────────────────────────────────────────────
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
       OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-60000}
-
-      # ── OpenAI-compatible API (active when AI_PROVIDER=openai) ────────────
-      # Supports OpenAI, DeepSeek, LiteLLM, Fastchat, Together.ai, etc.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-60000}
 
       # ── AI behaviour ──────────────────────────────────────────────────────
       # Minimum confidence (0–1) required to auto-apply a category.

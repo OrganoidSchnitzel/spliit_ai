@@ -2,7 +2,7 @@
 
 /**
  * Integration-style tests for the Express API using supertest.
- * The database and AI services are mocked so these run without external services.
+ * The database and Ollama are mocked so these run without external services.
  */
 
 const request = require('supertest');
@@ -15,16 +15,6 @@ jest.mock('../src/db', () => ({
   pool: {},
 }));
 
-// Mock the AI service factory + the services it returns
-const mockAiService = {
-  healthCheck: jest.fn().mockResolvedValue({ ok: true, models: ['llama3.2'] }),
-  suggestCategory: jest.fn(),
-};
-jest.mock('../src/services/aiServiceFactory', () => ({
-  getService: () => mockAiService,
-}));
-
-// Also mock ollamaService to avoid side-effects (buildPrompt is still needed)
 jest.mock('../src/services/ollamaService', () => ({
   healthCheck: jest.fn().mockResolvedValue({ ok: true, models: ['llama3.2'] }),
   suggestCategory: jest.fn(),
@@ -40,6 +30,7 @@ jest.mock('../src/services/historyService', () => ({
 }));
 
 const db = require('../src/db');
+const ollamaService = require('../src/services/ollamaService');
 
 const MOCK_CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -63,19 +54,18 @@ describe('GET /api/health', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.database.ok).toBe(true);
-    expect(res.body.ai.ok).toBe(true);
+    expect(res.body.ollama.ok).toBe(true);
   });
 });
 
 describe('GET /api/settings', () => {
-  it('returns non-sensitive config', async () => {
+  it('returns non-sensitive config without any API keys', async () => {
     const res = await request(app).get('/api/settings');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('aiProvider');
     expect(res.body).toHaveProperty('ollama');
-    expect(res.body).toHaveProperty('openai');
-    expect(res.body.openai).not.toHaveProperty('apiKey'); // must not leak the key
-    expect(res.body.openai).toHaveProperty('apiKeySet');
+    expect(res.body).toHaveProperty('confidenceThreshold');
+    expect(res.body).toHaveProperty('scheduler');
+    expect(res.body).not.toHaveProperty('openai');
   });
 });
 
@@ -122,7 +112,7 @@ describe('POST /api/expenses/:id/suggest', () => {
       .mockResolvedValueOnce({ rows: [MOCK_EXPENSE] })   // getExpenseById
       .mockResolvedValueOnce({ rows: MOCK_CATEGORIES }); // getCategories
 
-    mockAiService.suggestCategory.mockResolvedValue({
+    ollamaService.suggestCategory.mockResolvedValue({
       categoryId: 1,
       confidence: 0.88,
       reasoning: 'Expense title mentions supermarket.',

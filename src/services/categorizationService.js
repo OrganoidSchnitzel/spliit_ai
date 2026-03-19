@@ -1,7 +1,7 @@
 'use strict';
 
 const db = require('../db');
-const AIServiceFactory = require('./aiServiceFactory');
+const ollamaService = require('./ollamaService');
 const historyService = require('./historyService');
 const config = require('../config');
 
@@ -74,9 +74,8 @@ async function updateExpenseCategory(expenseId, categoryId) {
  * @returns {{ expenseId: string, status: 'applied'|'low_confidence'|'error', suggestion?: object, error?: string }}
  */
 async function processExpense(expense, categories) {
-  const aiService = AIServiceFactory.getService();
   try {
-    const suggestion = await aiService.suggestCategory(expense, categories);
+    const suggestion = await ollamaService.suggestCategory(expense, categories);
     const categoryEntry = categories.find((c) => c.id === suggestion.categoryId);
     const categoryName = categoryEntry ? categoryEntry.name : null;
 
@@ -96,7 +95,6 @@ async function processExpense(expense, categories) {
         confidence: suggestion.confidence,
         reasoning: suggestion.reasoning,
         status: 'applied',
-        provider: config.aiProvider,
       });
       return { expenseId: expense.id, status: 'applied', suggestion };
     }
@@ -115,7 +113,6 @@ async function processExpense(expense, categories) {
       confidence: suggestion.confidence,
       reasoning: suggestion.reasoning,
       status: 'low_confidence',
-      provider: config.aiProvider,
     });
     return { expenseId: expense.id, status: 'low_confidence', suggestion };
   } catch (err) {
@@ -128,7 +125,6 @@ async function processExpense(expense, categories) {
       currency: expense.currency,
       status: 'error',
       reasoning: err.message,
-      provider: config.aiProvider,
     });
     return { expenseId: expense.id, status: 'error', error: err.message };
   }

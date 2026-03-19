@@ -2,7 +2,7 @@
 
 const express = require('express');
 const db = require('../db');
-const AIServiceFactory = require('../services/aiServiceFactory');
+const ollamaService = require('../services/ollamaService');
 const categorizationService = require('../services/categorizationService');
 const historyService = require('../services/historyService');
 const config = require('../config');
@@ -13,15 +13,14 @@ const router = express.Router();
 
 router.get('/health', async (_req, res) => {
   try {
-    const aiService = AIServiceFactory.getService();
-    const [dbOk, aiStatus] = await Promise.all([
+    const [dbOk, ollamaStatus] = await Promise.all([
       db.healthCheck(),
-      aiService.healthCheck(),
+      ollamaService.healthCheck(),
     ]);
     res.json({
-      status: dbOk && aiStatus.ok ? 'ok' : 'degraded',
+      status: dbOk && ollamaStatus.ok ? 'ok' : 'degraded',
       database: { ok: dbOk },
-      ai: { provider: config.aiProvider, ...aiStatus },
+      ollama: ollamaStatus,
       scheduler: {
         enabled: config.scheduler.enabled,
         cron: config.scheduler.cronExpression,
@@ -78,7 +77,7 @@ router.post('/expenses/:id/suggest', async (req, res) => {
       return res.status(400).json({ error: 'No categories found in database' });
     }
 
-    const suggestion = await AIServiceFactory.getService().suggestCategory(expense, categories);
+    const suggestion = await ollamaService.suggestCategory(expense, categories);
     const category = categories.find((c) => c.id === suggestion.categoryId);
 
     res.json({
@@ -165,15 +164,9 @@ router.get('/history', (req, res) => {
  */
 router.get('/settings', (_req, res) => {
   res.json({
-    aiProvider: config.aiProvider,
     ollama: {
       baseUrl: config.ollama.baseUrl,
       model: config.ollama.model,
-    },
-    openai: {
-      baseUrl: config.openai.baseUrl,
-      model: config.openai.model,
-      apiKeySet: Boolean(config.openai.apiKey),
     },
     confidenceThreshold: config.confidenceThreshold,
     scheduler: config.scheduler,
