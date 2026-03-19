@@ -168,7 +168,7 @@ async function suggestCategory(expense, categories) {
 
   return {
     categoryId,
-    categoryName: categoryEntry.name,
+    categoryName,
     confidence,
     reasoning,
   };
