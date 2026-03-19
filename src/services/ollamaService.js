@@ -54,7 +54,7 @@ function buildPrompt(expense, categories) {
       ? `\nNotes: ${expense.notes.trim()}`
       : '';
 
-  return `System: You are an expense categorization assistant for Spliit.
+  return `You are an expense categorization assistant for Spliit.
 You must always return valid JSON only.
 
 Rules:
