@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  spliit-ai:
+    build: .
+    # Or use the pre-built image:
+    # image: ghcr.io/organoidschnitzel/spliit_ai:latest
+    container_name: spliit-ai
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # ── Spliit PostgreSQL connection ──────────────────────────────────────
+      DB_HOST: ${DB_HOST:-spliit-postgres}   # hostname of the Spliit DB container
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-spliit}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_SSL: ${DB_SSL:-false}
+
+      # ── Ollama (local LLM) ────────────────────────────────────────────────
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-60000}
+
+      # ── AI behaviour ──────────────────────────────────────────────────────
+      # Minimum confidence (0–1) required to auto-apply a category.
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.6}
+
+      # ── Scheduler ────────────────────────────────────────────────────────
+      # Set to 'false' to disable automatic periodic runs.
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      # Cron expression – default: every 15 minutes.
+      SCHEDULER_CRON: ${SCHEDULER_CRON:-*/15 * * * *}
+
+      # ── Processing ───────────────────────────────────────────────────────
+      # Maximum number of expenses to process per scheduler run.
+      BATCH_SIZE: ${BATCH_SIZE:-10}
+
+      PORT: 3000
+
+    networks:
+      - spliit-network
+    volumes:
+      - spliit-ai-data:/app/data
+
+# ─── Attach to the existing Spliit network ────────────────────────────────────
+# If Spliit and Ollama run in a different Compose project, use an external
+# network (uncomment below and set the correct network name).
+networks:
+  spliit-network:
+    external: false
+    # name: spliit_default   # ← uncomment and set to your Spliit network name
+
+volumes:
+  spliit-ai-data: {}

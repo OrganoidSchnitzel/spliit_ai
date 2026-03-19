@@ -1,0 +1,28 @@
+{
+  "name": "spliit-ai",
+  "version": "1.0.0",
+  "description": "Automatic expense categorization for Spliit using local LLMs via Ollama",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "jest --testPathPattern=tests/"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "better-sqlite3": "^12.8.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.3.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.3",
+    "supertest": "^7.2.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

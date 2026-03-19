@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spliit AI – Expense Categorizer</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <span class="brand-icon">🤖</span>
+      <span class="brand-name">Spliit AI</span>
+    </div>
+    <div class="navbar-links">
+      <a href="/" class="nav-link active" id="nav-dashboard">Dashboard</a>
+      <a href="/playground" class="nav-link" id="nav-playground">Playground</a>
+      <a href="/history" class="nav-link" id="nav-history">History</a>
+      <a href="/settings" class="nav-link" id="nav-settings">Settings</a>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <!-- ─── Dashboard ─────────────────────────────────── -->
+    <section id="page-dashboard">
+      <h1 class="page-title">Dashboard</h1>
+
+      <div class="status-grid">
+        <div class="status-card" id="card-db">
+          <div class="status-label">Database</div>
+          <div class="status-value" id="status-db">…</div>
+        </div>
+        <div class="status-card" id="card-ollama">
+          <div class="status-label">Ollama</div>
+          <div class="status-value" id="status-ollama">…</div>
+        </div>
+        <div class="status-card" id="card-scheduler">
+          <div class="status-label">Scheduler</div>
+          <div class="status-value" id="status-scheduler">…</div>
+        </div>
+        <div class="status-card">
+          <div class="status-label">Uncategorized</div>
+          <div class="status-value" id="status-uncategorized">…</div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h2>Uncategorized Expenses</h2>
+        <button class="btn btn-primary" id="btn-run-batch">▶ Run Categorization</button>
+      </div>
+
+      <div id="batch-result" class="alert hidden"></div>
+
+      <div class="table-wrapper">
+        <table class="expense-table" id="uncategorized-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Group</th>
+              <th>Title</th>
+              <th>Amount</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="uncategorized-tbody">
+            <tr><td colspan="5" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─── Playground ────────────────────────────────── -->
+    <section id="page-playground" class="hidden">
+      <h1 class="page-title">Playground</h1>
+      <p class="page-subtitle">Test AI categorization on any expense before committing changes to the database.</p>
+
+      <div class="playground-grid">
+        <div class="card">
+          <h2>Select Expense</h2>
+          <label for="pg-expense-select">Uncategorized expense</label>
+          <select id="pg-expense-select" class="form-control">
+            <option value="">— pick an expense —</option>
+          </select>
+
+          <button class="btn btn-secondary" id="btn-pg-suggest" disabled>
+            🔮 Get AI Suggestion
+          </button>
+        </div>
+
+        <div class="card" id="pg-result-card">
+          <h2>AI Suggestion</h2>
+          <div id="pg-result-empty" class="empty-state">Run a suggestion to see results here.</div>
+          <div id="pg-result-content" class="hidden">
+            <table class="detail-table">
+              <tr><th>Expense</th><td id="pg-expense-title">—</td></tr>
+              <tr><th>Amount</th><td id="pg-expense-amount">—</td></tr>
+              <tr><th>Suggested Category</th><td id="pg-cat-name">—</td></tr>
+              <tr><th>Confidence</th><td id="pg-confidence">—</td></tr>
+              <tr><th>Reasoning</th><td id="pg-reasoning">—</td></tr>
+            </table>
+
+            <div class="apply-row">
+              <label for="pg-cat-override">Apply category:</label>
+              <select id="pg-cat-override" class="form-control"></select>
+              <button class="btn btn-success" id="btn-pg-apply">✔ Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pg-alert" class="alert hidden"></div>
+    </section>
+    <!-- ─── History ──────────────────────────────────── -->
+    <section id="page-history" class="hidden">
+      <h1 class="page-title">Processing History</h1>
+      <p class="page-subtitle">A log of every categorization attempt made by Spliit AI.</p>
+
+      <div class="status-grid" id="history-stats-grid">
+        <div class="status-card">
+          <div class="status-label">Total Processed</div>
+          <div class="status-value" id="hist-total">…</div>
+        </div>
+        <div class="status-card">
+          <div class="status-label">Auto-Applied</div>
+          <div class="status-value ok" id="hist-applied">…</div>
+        </div>
+        <div class="status-card">
+          <div class="status-label">Low Confidence</div>
+          <div class="status-value warn" id="hist-low">…</div>
+        </div>
+        <div class="status-card">
+          <div class="status-label">Errors</div>
+          <div class="status-value error" id="hist-errors">…</div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="expense-table" id="history-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Expense</th>
+              <th>Group</th>
+              <th>Amount</th>
+              <th>Category</th>
+              <th>Confidence</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr><td colspan="7" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─── Settings ─────────────────────────────────── -->
+    <section id="page-settings" class="hidden">
+      <h1 class="page-title">Settings</h1>
+      <p class="page-subtitle">Current configuration. Edit <code>.env</code> and restart to change.</p>
+
+      <div class="settings-grid" id="settings-content">
+        <div class="loading">Loading…</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
