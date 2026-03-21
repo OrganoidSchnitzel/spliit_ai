@@ -466,9 +466,6 @@ async function suggestCategory(expense, categories) {
   const confidence = parseFloat(parsed.confidence);
   const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning : '';
 
-  if (!Number.isFinite(categoryId) || categoryId <= 0) {
-    throw new Error(`Invalid categoryId in Ollama response: ${parsed.categoryId}`);
-  }
   if (!categoryName) {
     throw new Error(`Invalid categoryName in Ollama response: ${parsed.categoryName}`);
   }
@@ -479,21 +476,16 @@ async function suggestCategory(expense, categories) {
     throw new Error(`Invalid reasoning in Ollama response: ${parsed.reasoning}`);
   }
 
-  const categoryEntry = categories.find((c) => c.id === categoryId);
-  if (!categoryEntry) {
+  const categoryEntryByName = categories.find((c) => c.name === categoryName);
+  if (!categoryEntryByName) {
     throw new Error(
-      `Ollama returned categoryId ${categoryId} which is not in the list of valid categories`
-    );
-  }
-  if (categoryName !== categoryEntry.name) {
-    throw new Error(
-      `Ollama returned mismatched categoryId/categoryName: ${categoryId} -> "${categoryEntry.name}", got "${categoryName}"`
+      `Ollama returned categoryName "${categoryName}" which is not in the list of valid categories`
     );
   }
 
   const baseSuggestion = {
-    categoryId,
-    categoryName,
+    categoryId: categoryEntryByName.id,
+    categoryName: categoryEntryByName.name,
     confidence,
     reasoning,
   };

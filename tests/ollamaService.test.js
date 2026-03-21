@@ -266,24 +266,46 @@ describe('ollamaService.suggestCategory', () => {
     expect(res.confidence).toBe(0.61);
   });
 
-  it('rejects mismatched categoryId/categoryName', async () => {
+  it('repairs mismatched categoryId by trusting categoryName from allowed categories', async () => {
     mockPost.mockResolvedValue({
       data: {
         response: JSON.stringify({
           categoryId: 2,
-          categoryName: 'Movies',
+          categoryName: 'Fuel',
           confidence: 0.7,
           reasoning: 'example',
         }),
       },
     });
 
+    const res = await suggestCategory(
+      { id: 'exp-3', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryName).toBe('Fuel');
+    expect(res.categoryId).toBe(3);
+    expect(res.confidence).toBe(0.7);
+  });
+
+  it('rejects hallucinated categoryName that is not in provided categories', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 12,
+          categoryName: 'Transportation',
+          confidence: 0.74,
+          reasoning: 'car sharing',
+        }),
+      },
+    });
+
     await expect(
       suggestCategory(
-        { id: 'exp-3', title: 'Pizza', amount: 2500, notes: null, currency: 'EUR' },
+        { id: 'exp-3b', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
         CATEGORIES
       )
-    ).rejects.toThrow('mismatched categoryId/categoryName');
+    ).rejects.toThrow('which is not in the list of valid categories');
   });
 
   it('down-ranks overconfident non-home suggestion for furniture-like title', async () => {
