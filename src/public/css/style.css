@@ -51,6 +51,17 @@ body {
 
 .navbar-links { display: flex; gap: .25rem; }
 
+.app-version {
+  margin-left: 1rem;
+  padding: .2rem .5rem;
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 999px;
+  font-size: .75rem;
+  line-height: 1;
+  color: rgba(255,255,255,.9);
+  white-space: nowrap;
+}
+
 .nav-link {
   color: rgba(255,255,255,.8);
   text-decoration: none;

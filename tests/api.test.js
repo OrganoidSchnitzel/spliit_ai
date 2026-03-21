@@ -65,6 +65,7 @@ describe('GET /api/settings', () => {
     expect(res.body).toHaveProperty('ollama');
     expect(res.body).toHaveProperty('confidenceThreshold');
     expect(res.body).toHaveProperty('scheduler');
+    expect(res.body).toHaveProperty('appVersion');
     expect(res.body).not.toHaveProperty('openai');
   });
 });
