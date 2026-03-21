@@ -305,7 +305,29 @@ describe('ollamaService.suggestCategory', () => {
         { id: 'exp-3b', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
         CATEGORIES
       )
-    ).rejects.toThrow('which is not in the list of valid categories');
+    ).rejects.toThrow('invalid category reference');
+  });
+
+  it('repairs mismatched categoryName by trusting valid categoryId from allowed categories', async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        response: JSON.stringify({
+          categoryId: 3,
+          categoryName: 'Transportation',
+          confidence: 0.74,
+          reasoning: 'car sharing',
+        }),
+      },
+    });
+
+    const res = await suggestCategory(
+      { id: 'exp-3c', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
+      CATEGORIES
+    );
+
+    expect(res.categoryId).toBe(3);
+    expect(res.categoryName).toBe('Fuel');
+    expect(res.confidence).toBe(0.74);
   });
 
   it('down-ranks overconfident non-home suggestion for furniture-like title', async () => {

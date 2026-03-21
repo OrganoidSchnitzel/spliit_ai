@@ -477,15 +477,17 @@ async function suggestCategory(expense, categories) {
   }
 
   const categoryEntryByName = categories.find((c) => c.name === categoryName);
-  if (!categoryEntryByName) {
+  const categoryEntryById = categories.find((c) => c.id === categoryId);
+  const resolvedCategory = categoryEntryByName || categoryEntryById;
+  if (!resolvedCategory) {
     throw new Error(
-      `Ollama returned categoryName "${categoryName}" which is not in the list of valid categories`
+      `Ollama returned invalid category reference: id=${parsed.categoryId}, name="${categoryName}"`
     );
   }
 
   const baseSuggestion = {
-    categoryId: categoryEntryByName.id,
-    categoryName: categoryEntryByName.name,
+    categoryId: resolvedCategory.id,
+    categoryName: resolvedCategory.name,
     confidence,
     reasoning,
   };
