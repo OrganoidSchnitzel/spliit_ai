@@ -307,6 +307,9 @@ async function loadHistory() {
 }
 
 // ─── Settings ──────────────────────────────────────────────────────────────────
+let allWordLists = {};
+let currentWordList = null;
+
 async function loadSettings() {
   const container = document.getElementById('settings-content');
   try {
@@ -329,8 +332,171 @@ async function loadSettings() {
         ${row('Cron expression', s.scheduler.cronExpression)}
       </div>
     `;
+
+    // Load prompt template
+    await loadPromptTemplate();
+
+    // Load word lists
+    await loadWordListSelector();
   } catch (err) {
     container.innerHTML = `<p class="error">Failed to load settings: ${esc(err.message)}</p>`;
+  }
+}
+
+async function loadPromptTemplate() {
+  try {
+    const res = await fetch('/api/prompt/template').then((r) => r.json());
+    document.getElementById('prompt-template').value = res.template || '';
+  } catch (err) {
+    showAlert('prompt-alert', `Failed to load prompt template: ${err.message}`, 'error');
+  }
+}
+
+async function loadWordListSelector() {
+  try {
+    const res = await fetch('/api/wordlists').then((r) => r.json());
+    allWordLists = res.wordLists || {};
+
+    const select = document.getElementById('wordlist-select');
+    select.innerHTML = '<option value="">— select a list —</option>' +
+      Object.keys(allWordLists).map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+  } catch (err) {
+    showAlert('wordlist-alert', `Failed to load word lists: ${err.message}`, 'error');
+  }
+}
+
+document.getElementById('btn-save-prompt').addEventListener('click', async () => {
+  const template = document.getElementById('prompt-template').value;
+  const btn = document.getElementById('btn-save-prompt');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/prompt/template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template }),
+    }).then((r) => r.json());
+
+    if (res.error) {
+      showAlert('prompt-alert', `Error: ${res.error}`, 'error');
+    } else {
+      showAlert('prompt-alert', '✔ Prompt template saved!', 'success');
+    }
+  } catch (err) {
+    showAlert('prompt-alert', `Request failed: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-reset-prompt').addEventListener('click', async () => {
+  if (!confirm('Reset to default prompt template?')) return;
+
+  const btn = document.getElementById('btn-reset-prompt');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/prompt/template', { method: 'DELETE' }).then((r) => r.json());
+
+    if (res.error) {
+      showAlert('prompt-alert', `Error: ${res.error}`, 'error');
+    } else {
+      document.getElementById('prompt-template').value = res.template;
+      showAlert('prompt-alert', '✔ Reset to default prompt!', 'success');
+    }
+  } catch (err) {
+    showAlert('prompt-alert', `Request failed: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('wordlist-select').addEventListener('change', (e) => {
+  const listName = e.target.value;
+  if (!listName) {
+    document.getElementById('wordlist-content').classList.add('hidden');
+    return;
+  }
+
+  currentWordList = listName;
+  const listData = allWordLists[listName];
+  if (!listData) return;
+
+  document.getElementById('wordlist-name').textContent = listName;
+  const keywordList = document.getElementById('keyword-list');
+  keywordList.innerHTML = listData.keywords.map((kw) => `
+    <div class="keyword-item">
+      <span class="keyword-text">${esc(kw)}</span>
+      <button class="btn-remove-keyword" data-keyword="${esc(kw)}">✕</button>
+    </div>
+  `).join('');
+
+  // Add event listeners to remove buttons
+  document.querySelectorAll('.btn-remove-keyword').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const keyword = e.target.getAttribute('data-keyword');
+      await removeKeyword(listName, keyword);
+    });
+  });
+
+  document.getElementById('wordlist-content').classList.remove('hidden');
+});
+
+document.getElementById('btn-add-keyword').addEventListener('click', async () => {
+  if (!currentWordList) return;
+
+  const input = document.getElementById('new-keyword');
+  const keyword = input.value.trim();
+  if (!keyword) return;
+
+  const btn = document.getElementById('btn-add-keyword');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/wordlists/${currentWordList}/keywords`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword }),
+    }).then((r) => r.json());
+
+    if (res.error) {
+      showAlert('wordlist-alert', `Error: ${res.error}`, 'error');
+    } else {
+      // Refresh word lists
+      await loadWordListSelector();
+      // Refresh current list display
+      document.getElementById('wordlist-select').value = currentWordList;
+      document.getElementById('wordlist-select').dispatchEvent(new Event('change'));
+      input.value = '';
+      showAlert('wordlist-alert', `✔ Added "${keyword}" to ${currentWordList}`, 'success');
+    }
+  } catch (err) {
+    showAlert('wordlist-alert', `Request failed: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function removeKeyword(listName, keyword) {
+  if (!confirm(`Remove "${keyword}" from ${listName}?`)) return;
+
+  try {
+    const res = await fetch(`/api/wordlists/${listName}/keywords/${encodeURIComponent(keyword)}`, {
+      method: 'DELETE',
+    }).then((r) => r.json());
+
+    if (res.error) {
+      showAlert('wordlist-alert', `Error: ${res.error}`, 'error');
+    } else {
+      // Refresh word lists
+      await loadWordListSelector();
+      // Refresh current list display
+      document.getElementById('wordlist-select').value = currentWordList;
+      document.getElementById('wordlist-select').dispatchEvent(new Event('change'));
+      showAlert('wordlist-alert', `✔ Removed "${keyword}" from ${listName}`, 'success');
+    }
+  } catch (err) {
+    showAlert('wordlist-alert', `Request failed: ${err.message}`, 'error');
   }
 }
 

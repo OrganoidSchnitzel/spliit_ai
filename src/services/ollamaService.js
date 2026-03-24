@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const config = require('../config');
+const germanWordLists = require('../data/germanWordLists');
 
 const client = axios.create({
   baseURL: config.ollama.baseUrl,
@@ -50,108 +51,70 @@ async function healthCheck() {
 }
 
 /**
- * Build a prompt that asks the LLM to categorize an expense.
+ * Build an optimized prompt that asks the LLM to categorize an expense.
+ * Optimized for smaller models and faster processing on Intel N100.
  * @param {{ title: string, amount: number, notes?: string, currency?: string }} expense
  * @param {Array<{ id: number, grouping: string, name: string }>} categories
  * @returns {string}
  */
 function buildPrompt(expense, categories) {
-  const categoryList = categories
-    .map((c) => `- [ID: ${c.id}] ${c.name} (Group: ${c.grouping})`)
-    .join('\n');
-  const allowedNames = categories.length
-    ? categories.map((c) => `"${c.name}"`).join(', ')
-    : '(none)';
-  const foodLikeNames = categories
-    .filter((c) => /food|drink|restaurant|dining|grocer|supermarket/i.test(`${c.grouping} ${c.name}`))
-    .map((c) => `"${c.name}"`)
-    .join(', ');
-
-  const groceriesExampleCategory =
-    categories.find((c) => /grocer|supermarket|lebensmittel/i.test(c.name)) ||
-    categories[0];
-  const fuelKeywordCategory = categories.find((c) =>
-    /fuel|gas|petrol|tank/i.test(c.name)
-  );
-  const alternateExampleCategory =
-    groceriesExampleCategory && categories.length > 1
-      ? categories.find((c) => c.id !== groceriesExampleCategory.id)
-      : undefined;
-  let fuelExampleCategory = fuelKeywordCategory;
-  if (fuelExampleCategory && groceriesExampleCategory) {
-    fuelExampleCategory =
-      fuelExampleCategory.id === groceriesExampleCategory.id
-        ? alternateExampleCategory
-        : fuelExampleCategory;
-  } else if (!fuelExampleCategory) {
-    fuelExampleCategory = alternateExampleCategory || groceriesExampleCategory;
+  // Check if there's a custom prompt template
+  if (config.ollama.customPromptTemplate) {
+    return buildCustomPrompt(expense, categories, config.ollama.customPromptTemplate);
   }
-  const exampleSection =
-    groceriesExampleCategory &&
-    fuelExampleCategory &&
-    groceriesExampleCategory.id !== fuelExampleCategory.id
-      ? `Few-shot examples (follow this mapping behavior exactly):
-Example 1:
-Input expense title: "Edeka"
-Correct output:
-{
-  "reasoning": "Edeka is a German supermarket merchant, so this is a grocery expense.",
-  "categoryName": "${groceriesExampleCategory.name}",
-  "categoryId": ${groceriesExampleCategory.id},
-  "confidence": 0.91
+
+  // Create compact category list (only ID and name, no verbose grouping)
+  const categoryList = categories
+    .map((c) => `${c.id}:${c.name}`)
+    .join('|');
+
+  const amountFormatted = expense.currency
+    ? `${(expense.amount / 100).toFixed(2)}${expense.currency}`
+    : `${(expense.amount / 100).toFixed(2)}`;
+
+  const notesPart = expense.notes && expense.notes.trim() ? ` Notes:${expense.notes.trim()}` : '';
+
+  // Optimized minimal prompt for faster processing
+  return `Categorize expense. Return JSON only.
+Title:${expense.title}
+Amount:${amountFormatted}${notesPart}
+Categories(id:name): ${categoryList}
+
+Rules:
+- Pick ONE category ID from list
+- German context: Lidl/Rewe/Edeka/Aldi/Kaufland→grocery, Tankstelle→fuel, IKEA/Möbel→furniture
+- Match by merchant type, not just word similarity
+- Output format:
+{"reasoning":"<why>","categoryName":"<exact name>","categoryId":<id>,"confidence":<0-1>}`;
 }
 
-Example 2:
-Input expense title: "Tankstelle"
-Correct output:
-{
-  "reasoning": "Tankstelle means gas station in German, so this maps to fuel expenses.",
-  "categoryName": "${fuelExampleCategory.name}",
-  "categoryId": ${fuelExampleCategory.id},
-  "confidence": 0.93
-}`
-      : '';
+/**
+ * Build a prompt using a custom template with placeholders.
+ * Placeholders: {{title}}, {{amount}}, {{notes}}, {{categories}}, {{categoryList}}
+ * @param {{ title: string, amount: number, notes?: string, currency?: string }} expense
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @param {string} template
+ * @returns {string}
+ */
+function buildCustomPrompt(expense, categories, template) {
+  const categoryList = categories
+    .map((c) => `${c.id}:${c.name}`)
+    .join('|');
+
+  const categoryListDetailed = categories
+    .map((c) => `[${c.id}] ${c.name} (${c.grouping})`)
+    .join('\n');
 
   const amountFormatted = expense.currency
     ? `${(expense.amount / 100).toFixed(2)} ${expense.currency}`
     : `${(expense.amount / 100).toFixed(2)}`;
 
-  const notesPart =
-    expense.notes && expense.notes.trim()
-      ? `\nNotes: ${expense.notes.trim()}`
-      : '';
-
-  return `You are an expense categorization assistant for Spliit.
-You must always return valid JSON only.
-
-Rules:
-1) Choose exactly one category from the provided list.
-2) categoryName must exactly match one list entry name. categoryId must be the exact ID of that same entry.
-3) Expense titles and notes are often in German (for example: Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle). Interpret German context correctly before mapping to a category.
-4) If uncertain, pick the best matching category and lower confidence.
-5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
-6) Never invent or alter category names. categoryName MUST be one of: ${allowedNames}.
-7) Reasoning must describe the spending type first (e.g., groceries, fuel, furniture), then map that type to the closest category from the list.
-8) Do not map by superficial word overlap. First infer what was purchased or the merchant type, then choose the closest category from the list.
-9) For household/furniture item titles (e.g., Schrank, Tisch, Stuhl), avoid food-related categories unless the merchant clearly indicates food service or groceries${foodLikeNames ? ` (${foodLikeNames})` : ''}.
-
-${exampleSection}
-
-Expense:
-  Title: ${expense.title}
-  Amount: ${amountFormatted}${notesPart}
-
-Available categories:
-${categoryList}
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "reasoning": "<short explanation>",
-  "categoryName": "<exact category name from the list above>",
-  "categoryId": <integer id from the list above that exactly matches categoryName>,
-  "confidence": <float between 0 and 1>
-}
-No markdown, no extra keys.`;
+  return template
+    .replace(/\{\{title\}\}/g, expense.title)
+    .replace(/\{\{amount\}\}/g, amountFormatted)
+    .replace(/\{\{notes\}\}/g, expense.notes || '')
+    .replace(/\{\{categories\}\}/g, categoryList)
+    .replace(/\{\{categoryList\}\}/g, categoryListDetailed);
 }
 
 /**
@@ -406,11 +369,19 @@ function applyTitleSemanticGuard(expense, suggestion, categories) {
 
 /**
  * Ask Ollama to suggest a category for the given expense.
+ * First tries word list matching for common German keywords, then falls back to LLM.
  * @param {{ id: string, title: string, amount: number, notes?: string, currency?: string }} expense
  * @param {Array<{ id: number, grouping: string, name: string }>} categories
- * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string, source?: string }}
  */
 async function suggestCategory(expense, categories) {
+  // Try word list matching first (much faster than LLM)
+  const wordListMatch = germanWordLists.matchWordList(expense, categories);
+  if (wordListMatch) {
+    return wordListMatch;
+  }
+
+  // Fall back to LLM if no word list match
   const prompt = buildPrompt(expense, categories);
 
   const payload = {
@@ -490,6 +461,7 @@ async function suggestCategory(expense, categories) {
     categoryName: resolvedCategory.name,
     confidence,
     reasoning,
+    source: 'llm',
   };
   const groceryAdjusted = applyGroceryMerchantOverride(expense, baseSuggestion, categories);
   const furnitureAdjusted = applyFurnitureTitleOverride(expense, groceryAdjusted, categories);
