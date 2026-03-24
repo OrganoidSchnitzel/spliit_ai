@@ -1,0 +1,49 @@
+name: Build and Publish Docker Image
+
+# This tells GitHub to build a new image every time you push to main OR publish a new release
+on:
+  push:
+    branches: [ "main" ]
+  release:
+    types: [ "published" ]
+
+env:
+  REGISTRY: ghcr.io
+  # ⚠️ Docker requires this to be 100% lowercase
+  IMAGE_NAME: organoidschnitzel/spliit_ai
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # GitHub provides this password automatically, no setup required!
+          password: ${{ secrets.GITHUB_TOKEN }} 
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
