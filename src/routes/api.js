@@ -173,7 +173,62 @@ router.get('/settings', (_req, res) => {
     scheduler: config.scheduler,
     processing: config.processing,
     appVersion: version,
+    modelRecommendations: [
+      {
+        name: 'qwen2.5:3b-instruct-q4_K_M',
+        profile: 'Fastest on Intel N100, good quality for short merchant titles',
+      },
+      {
+        name: 'llama3.2:3b-instruct-q4_K_M',
+        profile: 'Balanced default for consumer CPUs and 16GB RAM',
+      },
+      {
+        name: 'mistral:7b-instruct-q4_K_M',
+        profile: 'Higher quality, slower but still feasible on 16GB systems',
+      },
+    ],
   });
+});
+
+router.get('/settings/categorization', (_req, res) => {
+  try {
+    res.json({
+      promptTemplate: historyService.getCategorizationPromptTemplate(),
+      deterministicRules: historyService.getDeterministicCategoryRules(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/settings/categorization', (req, res) => {
+  const { promptTemplate, deterministicRules } = req.body || {};
+
+  if (typeof promptTemplate !== 'string' || !promptTemplate.trim()) {
+    return res.status(400).json({ error: 'promptTemplate must be a non-empty string' });
+  }
+  if (!Array.isArray(deterministicRules)) {
+    return res.status(400).json({ error: 'deterministicRules must be an array' });
+  }
+
+  const normalizedRules = [];
+  for (const rule of deterministicRules) {
+    const keyword = String(rule && rule.keyword ? rule.keyword : '').trim().toLowerCase();
+    const categoryPattern = String(rule && rule.categoryPattern ? rule.categoryPattern : '').trim();
+    const reasoning = String(rule && rule.reasoning ? rule.reasoning : '').trim();
+    if (!keyword || !categoryPattern) {
+      return res.status(400).json({ error: 'Each rule requires non-empty keyword and categoryPattern' });
+    }
+    normalizedRules.push({ keyword, categoryPattern, reasoning });
+  }
+
+  try {
+    historyService.setCategorizationPromptTemplate(promptTemplate);
+    historyService.setDeterministicCategoryRules(normalizedRules);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

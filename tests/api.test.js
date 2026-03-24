@@ -27,10 +27,15 @@ jest.mock('../src/services/historyService', () => ({
   recordResult: jest.fn(),
   getHistory: jest.fn(() => []),
   getStats: jest.fn(() => ({ total: 0, applied: 0, lowConfidence: 0, errors: 0 })),
+  getCategorizationPromptTemplate: jest.fn(() => 'template'),
+  setCategorizationPromptTemplate: jest.fn(),
+  getDeterministicCategoryRules: jest.fn(() => []),
+  setDeterministicCategoryRules: jest.fn(),
 }));
 
 const db = require('../src/db');
 const ollamaService = require('../src/services/ollamaService');
+const historyService = require('../src/services/historyService');
 
 const MOCK_CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -66,7 +71,43 @@ describe('GET /api/settings', () => {
     expect(res.body).toHaveProperty('confidenceThreshold');
     expect(res.body).toHaveProperty('scheduler');
     expect(res.body).toHaveProperty('appVersion');
+    expect(Array.isArray(res.body.modelRecommendations)).toBe(true);
     expect(res.body).not.toHaveProperty('openai');
+  });
+});
+
+describe('categorization settings endpoints', () => {
+  beforeEach(() => {
+    historyService.getCategorizationPromptTemplate.mockReturnValue('template');
+    historyService.getDeterministicCategoryRules.mockReturnValue([{ keyword: 'lidl', categoryPattern: 'grocer', reasoning: 'x' }]);
+  });
+
+  it('GET /api/settings/categorization returns prompt and rules', async () => {
+    const res = await request(app).get('/api/settings/categorization');
+    expect(res.status).toBe(200);
+    expect(res.body.promptTemplate).toBe('template');
+    expect(Array.isArray(res.body.deterministicRules)).toBe(true);
+  });
+
+  it('POST /api/settings/categorization validates and stores payload', async () => {
+    const payload = {
+      promptTemplate: 'custom',
+      deterministicRules: [{ keyword: 'rewe', categoryPattern: 'grocer', reasoning: 'test' }],
+    };
+    const res = await request(app).post('/api/settings/categorization').send(payload);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(historyService.setCategorizationPromptTemplate).toHaveBeenCalledWith('custom');
+    expect(historyService.setDeterministicCategoryRules).toHaveBeenCalledWith([
+      { keyword: 'rewe', categoryPattern: 'grocer', reasoning: 'test' },
+    ]);
+  });
+
+  it('POST /api/settings/categorization rejects invalid rules', async () => {
+    const res = await request(app)
+      .post('/api/settings/categorization')
+      .send({ promptTemplate: 'x', deterministicRules: [{ keyword: '', categoryPattern: 'a' }] });
+    expect(res.status).toBe(400);
   });
 });
 

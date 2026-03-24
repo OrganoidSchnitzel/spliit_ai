@@ -5,6 +5,10 @@ jest.mock('axios');
 const mockPost = jest.fn();
 const mockGet = jest.fn();
 axios.create.mockReturnValue({ post: mockPost, get: mockGet });
+jest.mock('../src/services/historyService', () => ({
+  getCategorizationPromptTemplate: jest.fn(),
+  getDeterministicCategoryRules: jest.fn(() => []),
+}));
 
 const {
   buildPrompt,
@@ -17,6 +21,7 @@ const {
   applyFurnitureTitleOverride,
   applyTitleSemanticGuard,
 } = require('../src/services/ollamaService');
+const historyService = require('../src/services/historyService');
 
 const CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -34,6 +39,12 @@ describe('ollamaService.buildPrompt', () => {
     currency: 'EUR',
     notes: null,
   };
+
+  beforeEach(() => {
+    historyService.getCategorizationPromptTemplate.mockReturnValue(
+      jest.requireActual('../src/services/historyService').DEFAULT_CATEGORY_PROMPT_TEMPLATE
+    );
+  });
 
   it('includes the expense title', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
@@ -163,6 +174,10 @@ describe('ollamaService.buildPrompt', () => {
 describe('ollamaService.suggestCategory', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    historyService.getCategorizationPromptTemplate.mockReturnValue(
+      jest.requireActual('../src/services/historyService').DEFAULT_CATEGORY_PROMPT_TEMPLATE
+    );
+    historyService.getDeterministicCategoryRules.mockReturnValue([]);
   });
 
   it('uses JSON response format and returns parsed suggestion', async () => {
@@ -435,6 +450,28 @@ describe('ollamaService.suggestCategory', () => {
     expect(res.categoryName).toBe('Groceries');
     expect(res.confidence).toBe(0.8);
     expect(res.reasoning).toContain('known grocery merchant');
+  });
+
+  it('uses deterministic rule match before LLM call', async () => {
+    historyService.getDeterministicCategoryRules.mockReturnValue([
+      { keyword: 'lidl', categoryPattern: 'grocer|grocery', reasoning: 'Rule match' },
+    ]);
+    const categories = [
+      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
+      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
+    ];
+    const res = await suggestCategory(
+      { id: 'exp-rule-1', title: 'Shopping at Lidl', amount: 2332, notes: '', currency: 'EUR' },
+      categories
+    );
+
+    expect(res).toEqual({
+      categoryId: 11,
+      categoryName: 'Groceries',
+      confidence: 0.99,
+      reasoning: 'Rule match',
+    });
+    expect(mockPost).not.toHaveBeenCalled();
   });
 });
 

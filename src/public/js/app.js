@@ -310,27 +310,89 @@ async function loadHistory() {
 async function loadSettings() {
   const container = document.getElementById('settings-content');
   try {
-    const s = await fetch('/api/settings').then((r) => r.json());
+    const [s, categorization] = await Promise.all([
+      fetch('/api/settings').then((r) => r.json()),
+      fetch('/api/settings/categorization').then((r) => r.json()),
+    ]);
 
     const row = (label, value) =>
       `<div class="settings-row"><span class="settings-label">${esc(label)}</span><span class="settings-val">${esc(String(value))}</span></div>`;
 
+    const modelRecommendations = Array.isArray(s.modelRecommendations)
+      ? s.modelRecommendations
+      : [];
+    const modelList = modelRecommendations.length
+      ? `<ul class="settings-list">${modelRecommendations
+        .map((m) => `<li><code>${esc(m.name)}</code> — ${esc(m.profile)}</li>`)
+        .join('')}</ul>`
+      : '<div class="settings-row"><span class="settings-label">No recommendations available</span></div>';
+
+    const promptTemplate = typeof categorization.promptTemplate === 'string'
+      ? categorization.promptTemplate
+      : '';
+    const deterministicRules = Array.isArray(categorization.deterministicRules)
+      ? categorization.deterministicRules
+      : [];
+
     container.innerHTML = `
       <div class="settings-group">
-        <h3>Ollama</h3>
-        ${row('Base URL', s.ollama.baseUrl)}
-        ${row('Model', s.ollama.model)}
+        <h3>Recommended models for Intel N100 / 16GB RAM</h3>
+        ${modelList}
       </div>
       <div class="settings-group">
-        <h3>Processing</h3>
+        <h3>Prompt template (editable)</h3>
+        <p class="settings-help">Use placeholders: <code>{{ALLOWED_NAMES}}</code>, <code>{{EXAMPLE_SECTION}}</code>, <code>{{TITLE}}</code>, <code>{{AMOUNT}}</code>, <code>{{NOTES_PART}}</code>, <code>{{CATEGORY_LIST}}</code>.</p>
+        <textarea id="settings-prompt-template" class="form-control settings-textarea">${esc(promptTemplate)}</textarea>
+      </div>
+      <div class="settings-group">
+        <h3>Deterministic rules (keyword → category regex)</h3>
+        <p class="settings-help">One rule per line as JSON. If a title matches a rule, LLM is skipped.</p>
+        <textarea id="settings-rules-json" class="form-control settings-textarea">${esc(JSON.stringify(deterministicRules, null, 2))}</textarea>
+      </div>
+      <div class="settings-group">
+        <h3>Current runtime configuration</h3>
+        ${row('Base URL', s.ollama.baseUrl)}
+        ${row('Model', s.ollama.model)}
         ${row('Confidence threshold', s.confidenceThreshold)}
         ${row('Batch size', s.processing.batchSize)}
         ${row('Scheduler enabled', s.scheduler.enabled)}
         ${row('Cron expression', s.scheduler.cronExpression)}
       </div>
+      <div class="settings-actions">
+        <button class="btn btn-primary" id="btn-save-categorization-settings">💾 Save prompt + rules</button>
+      </div>
     `;
+
+    document.getElementById('btn-save-categorization-settings').addEventListener('click', saveCategorizationSettings);
   } catch (err) {
     container.innerHTML = `<p class="error">Failed to load settings: ${esc(err.message)}</p>`;
+  }
+}
+
+async function saveCategorizationSettings() {
+  const promptTemplate = document.getElementById('settings-prompt-template').value;
+  const rawRules = document.getElementById('settings-rules-json').value;
+  let deterministicRules;
+  try {
+    deterministicRules = JSON.parse(rawRules);
+  } catch (err) {
+    showAlert('settings-alert', `Rules JSON is invalid: ${err.message}`, 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/settings/categorization', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ promptTemplate, deterministicRules }),
+    }).then((r) => r.json());
+    if (res.error) {
+      showAlert('settings-alert', `Error: ${res.error}`, 'error');
+      return;
+    }
+    showAlert('settings-alert', 'Settings saved. New categorization requests use the updated prompt/rules.', 'success');
+  } catch (err) {
+    showAlert('settings-alert', `Request failed: ${err.message}`, 'error');
   }
 }
 

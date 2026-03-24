@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const config = require('../config');
+const historyService = require('./historyService');
 
 const client = axios.create({
   baseURL: config.ollama.baseUrl,
@@ -56,6 +57,7 @@ async function healthCheck() {
  * @returns {string}
  */
 function buildPrompt(expense, categories) {
+  const customTemplate = historyService.getCategorizationPromptTemplate();
   const categoryList = categories
     .map((c) => `- [ID: ${c.id}] ${c.name} (Group: ${c.grouping})`)
     .join('\n');
@@ -120,6 +122,16 @@ Correct output:
     expense.notes && expense.notes.trim()
       ? `\nNotes: ${expense.notes.trim()}`
       : '';
+  if (typeof customTemplate === 'string' && customTemplate.trim()) {
+    return customTemplate
+      .replace(/\{\{ALLOWED_NAMES\}\}/g, allowedNames)
+      .replace(/\{\{EXAMPLE_SECTION\}\}/g, exampleSection)
+      .replace(/\{\{TITLE\}\}/g, expense.title)
+      .replace(/\{\{AMOUNT\}\}/g, amountFormatted)
+      .replace(/\{\{NOTES_PART\}\}/g, notesPart)
+      .replace(/\{\{CATEGORY_LIST\}\}/g, categoryList)
+      .replace(/\{\{FOOD_LIKE_NAMES\}\}/g, foodLikeNames ? ` (${foodLikeNames})` : '');
+  }
 
   return `You are an expense categorization assistant for Spliit.
 You must always return valid JSON only.
@@ -404,6 +416,49 @@ function applyTitleSemanticGuard(expense, suggestion, categories) {
   };
 }
 
+function getNormalizedTitle(expense) {
+  return String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tryDeterministicCategoryRules(expense, categories) {
+  const normalizedTitle = getNormalizedTitle(expense);
+  if (!normalizedTitle) return null;
+
+  const rules = historyService.getDeterministicCategoryRules();
+  if (!Array.isArray(rules) || rules.length === 0) return null;
+
+  for (const rule of rules) {
+    const keyword = String(rule && rule.keyword ? rule.keyword : '').toLowerCase().trim();
+    const categoryPattern = String(rule && rule.categoryPattern ? rule.categoryPattern : '')
+      .toLowerCase()
+      .trim();
+    if (!keyword || !categoryPattern) continue;
+    if (!hasTitleKeyword(normalizedTitle, keyword)) continue;
+
+    let regex;
+    try {
+      regex = new RegExp(categoryPattern, 'i');
+    } catch {
+      continue;
+    }
+    const matchedCategory = categories.find((c) => regex.test(`${c.grouping} ${c.name}`));
+    if (!matchedCategory) continue;
+    return {
+      categoryId: matchedCategory.id,
+      categoryName: matchedCategory.name,
+      confidence: 0.99,
+      reasoning:
+        rule.reasoning ||
+        `Deterministic rule matched merchant keyword "${keyword}" to category "${matchedCategory.name}".`,
+    };
+  }
+  return null;
+}
+
 /**
  * Ask Ollama to suggest a category for the given expense.
  * @param {{ id: string, title: string, amount: number, notes?: string, currency?: string }} expense
@@ -411,6 +466,11 @@ function applyTitleSemanticGuard(expense, suggestion, categories) {
  * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
  */
 async function suggestCategory(expense, categories) {
+  const deterministicSuggestion = tryDeterministicCategoryRules(expense, categories);
+  if (deterministicSuggestion) {
+    return deterministicSuggestion;
+  }
+
   const prompt = buildPrompt(expense, categories);
 
   const payload = {
@@ -509,4 +569,5 @@ module.exports = {
   isFurnitureLikeCategory,
   applyFurnitureTitleOverride,
   applyTitleSemanticGuard,
+  tryDeterministicCategoryRules,
 };
