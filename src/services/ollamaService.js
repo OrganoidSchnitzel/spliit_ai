@@ -433,9 +433,7 @@ function tryDeterministicCategoryRules(expense, categories) {
 
   for (const rule of rules) {
     const keyword = String(rule && rule.keyword ? rule.keyword : '').toLowerCase().trim();
-    const categoryPattern = String(rule && rule.categoryPattern ? rule.categoryPattern : '')
-      .toLowerCase()
-      .trim();
+    const categoryPattern = String(rule && rule.categoryPattern ? rule.categoryPattern : '').trim();
     if (!keyword || !categoryPattern) continue;
     if (!hasTitleKeyword(normalizedTitle, keyword)) continue;
 

@@ -323,7 +323,7 @@ async function loadSettings() {
       : [];
     const modelList = modelRecommendations.length
       ? `<ul class="settings-list">${modelRecommendations
-        .map((m) => `<li><code>${esc(m.name)}</code> — ${esc(m.profile)}</li>`)
+        .map((m) => `<li><code>${esc(m.name)}</code> &mdash; ${esc(m.profile)}</li>`)
         .join('')}</ul>`
       : '<div class="settings-row"><span class="settings-label">No recommendations available</span></div>';
 

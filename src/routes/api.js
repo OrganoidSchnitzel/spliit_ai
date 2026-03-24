@@ -213,7 +213,7 @@ router.post('/settings/categorization', (req, res) => {
 
   const normalizedRules = [];
   for (const rule of deterministicRules) {
-    const keyword = String(rule && rule.keyword ? rule.keyword : '').trim().toLowerCase();
+    const keyword = String(rule && rule.keyword ? rule.keyword : '').toLowerCase().trim();
     const categoryPattern = String(rule && rule.categoryPattern ? rule.categoryPattern : '').trim();
     const reasoning = String(rule && rule.reasoning ? rule.reasoning : '').trim();
     if (!keyword || !categoryPattern) {
