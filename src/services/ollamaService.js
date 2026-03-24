@@ -19,6 +19,21 @@ const OLLAMA_RESPONSE_SCHEMA = {
     reasoning: { type: 'string' },
   },
 };
+const MAX_FURNITURE_NON_HOME_CONFIDENCE = 0.39;
+const GROCERY_MERCHANT_KEYWORDS = ['lidl', 'rewe', 'edeka', 'aldi', 'kaufland'];
+const FURNITURE_TITLE_KEYWORDS = [
+  'schrank',
+  'tisch',
+  'stuhl',
+  'sofa',
+  'bett',
+  'kommode',
+  'regal',
+  'schreibtisch',
+  'lampe',
+  'möbel',
+  'moebel',
+];
 
 /**
  * Check that the Ollama service is reachable and the configured model is available.
@@ -42,8 +57,60 @@ async function healthCheck() {
  */
 function buildPrompt(expense, categories) {
   const categoryList = categories
-    .map((c) => `  - id ${c.id}: [${c.grouping}] ${c.name}`)
+    .map((c) => `- [ID: ${c.id}] ${c.name} (Group: ${c.grouping})`)
     .join('\n');
+  const allowedNames = categories.length
+    ? categories.map((c) => `"${c.name}"`).join(', ')
+    : '(none)';
+  const foodLikeNames = categories
+    .filter((c) => /food|drink|restaurant|dining|grocer|supermarket/i.test(`${c.grouping} ${c.name}`))
+    .map((c) => `"${c.name}"`)
+    .join(', ');
+
+  const groceriesExampleCategory =
+    categories.find((c) => /grocer|supermarket|lebensmittel/i.test(c.name)) ||
+    categories[0];
+  const fuelKeywordCategory = categories.find((c) =>
+    /fuel|gas|petrol|tank/i.test(c.name)
+  );
+  const alternateExampleCategory =
+    groceriesExampleCategory && categories.length > 1
+      ? categories.find((c) => c.id !== groceriesExampleCategory.id)
+      : undefined;
+  let fuelExampleCategory = fuelKeywordCategory;
+  if (fuelExampleCategory && groceriesExampleCategory) {
+    fuelExampleCategory =
+      fuelExampleCategory.id === groceriesExampleCategory.id
+        ? alternateExampleCategory
+        : fuelExampleCategory;
+  } else if (!fuelExampleCategory) {
+    fuelExampleCategory = alternateExampleCategory || groceriesExampleCategory;
+  }
+  const exampleSection =
+    groceriesExampleCategory &&
+    fuelExampleCategory &&
+    groceriesExampleCategory.id !== fuelExampleCategory.id
+      ? `Few-shot examples (follow this mapping behavior exactly):
+Example 1:
+Input expense title: "Edeka"
+Correct output:
+{
+  "reasoning": "Edeka is a German supermarket merchant, so this is a grocery expense.",
+  "categoryName": "${groceriesExampleCategory.name}",
+  "categoryId": ${groceriesExampleCategory.id},
+  "confidence": 0.91
+}
+
+Example 2:
+Input expense title: "Tankstelle"
+Correct output:
+{
+  "reasoning": "Tankstelle means gas station in German, so this maps to fuel expenses.",
+  "categoryName": "${fuelExampleCategory.name}",
+  "categoryId": ${fuelExampleCategory.id},
+  "confidence": 0.93
+}`
+      : '';
 
   const amountFormatted = expense.currency
     ? `${(expense.amount / 100).toFixed(2)} ${expense.currency}`
@@ -55,12 +122,20 @@ function buildPrompt(expense, categories) {
       : '';
 
   return `You are an expense categorization assistant for Spliit.
+You must always return valid JSON only.
 
 Rules:
 1) Choose exactly one category from the provided list.
-2) categoryId and categoryName must refer to the same list entry. categoryName must exactly match the selected category text.
-3) Expense titles and notes are often in German (for example: Edeka, Tankstelle). Interpret German context correctly before mapping to a category.
+2) categoryName must exactly match one list entry name. categoryId must be the exact ID of that same entry.
+3) Expense titles and notes are often in German (for example: Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle). Interpret German context correctly before mapping to a category.
 4) If uncertain, pick the best matching category and lower confidence.
+5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
+6) Never invent or alter category names. categoryName MUST be one of: ${allowedNames}.
+7) Reasoning must describe the spending type first (e.g., groceries, fuel, furniture), then map that type to the closest category from the list.
+8) Do not map by superficial word overlap. First infer what was purchased or the merchant type, then choose the closest category from the list.
+9) For household/furniture item titles (e.g., Schrank, Tisch, Stuhl), avoid food-related categories unless the merchant clearly indicates food service or groceries${foodLikeNames ? ` (${foodLikeNames})` : ''}.
+
+${exampleSection}
 
 Expense:
   Title: ${expense.title}
@@ -71,10 +146,10 @@ ${categoryList}
 
 Respond ONLY with valid JSON in this exact format:
 {
-  "categoryId": <integer id from the list above>,
+  "reasoning": "<short explanation>",
   "categoryName": "<exact category name from the list above>",
-  "confidence": <float between 0 and 1>,
-  "reasoning": "<short explanation>"
+  "categoryId": <integer id from the list above that exactly matches categoryName>,
+  "confidence": <float between 0 and 1>
 }
 No markdown, no extra keys.`;
 }
@@ -86,9 +161,247 @@ No markdown, no extra keys.`;
  */
 function stripMarkdown(text) {
   return text
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
+    .replace(/```(?:json)?/gi, '')
     .trim();
+}
+
+/**
+ * Remove common reasoning/thinking wrapper tags emitted by some models.
+ * @param {string} text
+ * @returns {string}
+ */
+function stripThinkingTags(text) {
+  return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+/**
+ * Extract the first complete top-level JSON object from noisy model output.
+ * Handles conversational filler around JSON and ignores braces inside strings.
+ * @param {string} text
+ * @returns {string}
+ */
+function extractFirstJsonObject(text) {
+  const cleaned = stripThinkingTags(stripMarkdown(text || ''));
+  const firstBraceIndex = cleaned.search(/\{/);
+  if (firstBraceIndex < 0) return cleaned;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = firstBraceIndex; i < cleaned.length; i += 1) {
+    const ch = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return cleaned.slice(firstBraceIndex, i + 1).trim();
+      }
+    }
+  }
+
+  return cleaned.slice(firstBraceIndex).trim();
+}
+
+/**
+ * Normalize potential response locations/shapes from Ollama into a string.
+ * @param {any} data
+ * @returns {string}
+ */
+function getRawModelText(data) {
+  if (!data) return '';
+  const candidate =
+    data.response !== undefined
+      ? data.response
+      : data.message && data.message.content !== undefined
+        ? data.message.content
+        : '';
+  if (typeof candidate === 'string') return candidate;
+  try {
+    return JSON.stringify(candidate);
+  } catch {
+    return String(candidate || '');
+  }
+}
+
+/**
+ * Check whether a normalized title contains a keyword as a standalone token.
+ * @param {string} normalizedTitle
+ * @param {string} keyword
+ * @returns {boolean}
+ */
+function hasTitleKeyword(normalizedTitle, keyword) {
+  return (
+    normalizedTitle === keyword ||
+    normalizedTitle.startsWith(`${keyword} `) ||
+    normalizedTitle.endsWith(` ${keyword}`) ||
+    normalizedTitle.includes(` ${keyword} `)
+  );
+}
+
+/**
+ * Check whether a category appears grocery/supermarket related.
+ * @param {{ grouping?: string, name?: string }} category
+ * @returns {boolean}
+ */
+function isGroceryLikeCategory(category) {
+  const text = `${category && category.grouping ? category.grouping : ''} ${
+    category && category.name ? category.name : ''
+  }`.toLowerCase();
+  const isGroceryLike = /grocer|grocery|supermarket|lebensmittel/.test(text);
+  const isRestaurantLike = /restaurant|dining|cafe|bar|take.?away|delivery/.test(text);
+  return isGroceryLike && !isRestaurantLike;
+}
+
+/**
+ * For clear grocery merchants (e.g., Lidl/Rewe/Edeka), prefer a grocery/supermarket
+ * category when available.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyGroceryMerchantOverride(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalizedTitle) return suggestion;
+
+  const isGroceryMerchantSignal = GROCERY_MERCHANT_KEYWORDS.some((keyword) =>
+    hasTitleKeyword(normalizedTitle, keyword)
+  );
+  if (!isGroceryMerchantSignal) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  if (selectedCategory && isGroceryLikeCategory(selectedCategory)) return suggestion;
+
+  const groceryCategory = categories.find((c) =>
+    /grocer|grocery|supermarket|lebensmittel/.test(`${c.grouping} ${c.name}`.toLowerCase())
+  );
+  const fallbackGroceryCategory = categories.find((c) => isGroceryLikeCategory(c));
+  const preferredCategory = groceryCategory || fallbackGroceryCategory;
+  if (!preferredCategory) return suggestion;
+
+  return {
+    ...suggestion,
+    categoryId: preferredCategory.id,
+    categoryName: preferredCategory.name,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is a known grocery merchant, so the suggestion was mapped to "${preferredCategory.name}".`,
+  };
+}
+
+/**
+ * Check whether a category appears furniture/home related.
+ * @param {{ grouping?: string, name?: string }} category
+ * @returns {boolean}
+ */
+function isFurnitureLikeCategory(category) {
+  const text = `${category && category.grouping ? category.grouping : ''} ${
+    category && category.name ? category.name : ''
+  }`.toLowerCase();
+  return /möbel|moebel|furniture|home|household|living|interior|wohnung|wohnen/.test(text);
+}
+
+/**
+ * For clearly furniture-related titles/merchants (e.g., Schrank, IKEA), prefer
+ * a furniture/home category when available.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyFurnitureTitleOverride(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalizedTitle) return suggestion;
+
+  const isFurnitureSignal =
+    hasTitleKeyword(normalizedTitle, 'ikea') || hasTitleKeyword(normalizedTitle, 'schrank');
+  if (!isFurnitureSignal) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  if (selectedCategory && isFurnitureLikeCategory(selectedCategory)) return suggestion;
+
+  const primaryFurnitureCategory = categories.find((c) =>
+    /möbel|moebel|furniture/.test(`${c.grouping} ${c.name}`.toLowerCase())
+  );
+  const fallbackFurnitureCategory = categories.find((c) => isFurnitureLikeCategory(c));
+  const furnitureCategory = primaryFurnitureCategory || fallbackFurnitureCategory;
+  if (!furnitureCategory) return suggestion;
+
+  return {
+    ...suggestion,
+    categoryId: furnitureCategory.id,
+    categoryName: furnitureCategory.name,
+    confidence: suggestion.confidence,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is furniture/home related, so the suggestion was mapped to "${furnitureCategory.name}".`,
+  };
+}
+
+/**
+ * Apply a conservative confidence guard for known ambiguous furniture-like titles
+ * to avoid overconfident non-home classifications.
+ * @param {{ title?: string }} expense
+ * @param {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }} suggestion
+ * @param {Array<{ id: number, grouping: string, name: string }>} categories
+ * @returns {{ categoryId: number, categoryName: string, confidence: number, reasoning: string }}
+ */
+function applyTitleSemanticGuard(expense, suggestion, categories) {
+  const normalizedTitle = String(expense && expense.title ? expense.title : '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalizedTitle) return suggestion;
+
+  const isFurnitureLikeTitle = FURNITURE_TITLE_KEYWORDS.some((keyword) =>
+    hasTitleKeyword(normalizedTitle, keyword)
+  );
+
+  if (!isFurnitureLikeTitle) return suggestion;
+
+  const selectedCategory = categories.find((c) => c.id === suggestion.categoryId);
+  const isHomeLikeCategory =
+    isFurnitureLikeCategory(selectedCategory || { grouping: '', name: suggestion.categoryName }) ||
+    /renovat|diy|hardware|bau|garden/.test(
+      `${selectedCategory ? selectedCategory.grouping : ''} ${
+        selectedCategory ? selectedCategory.name : suggestion.categoryName
+      }`.toLowerCase()
+    );
+  if (isHomeLikeCategory) return suggestion;
+
+  const guardedConfidence = Math.min(
+    suggestion.confidence,
+    MAX_FURNITURE_NON_HOME_CONFIDENCE
+  );
+  if (guardedConfidence === suggestion.confidence) return suggestion;
+
+  return {
+    ...suggestion,
+    confidence: guardedConfidence,
+    reasoning: `${suggestion.reasoning} Heuristic note: "${expense.title}" is typically a furniture/household item, so non-home categories were down-ranked.`,
+  };
 }
 
 /**
@@ -104,7 +417,7 @@ async function suggestCategory(expense, categories) {
     model: config.ollama.model,
     prompt,
     stream: false,
-    format: OLLAMA_RESPONSE_SCHEMA,
+    format: 'json',
   };
 
   let response;
@@ -114,14 +427,26 @@ async function suggestCategory(expense, categories) {
     throw new Error(`Ollama request failed: ${err.message}`);
   }
 
-  const raw = (response.data && response.data.response) || '';
-  const cleaned = stripMarkdown(raw);
+  const raw = getRawModelText(response.data);
+  const normalizedRaw = stripThinkingTags(stripMarkdown(raw || ''));
+  const cleaned = extractFirstJsonObject(normalizedRaw);
 
   let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new Error(`Failed to parse Ollama response as JSON: ${cleaned.substring(0, 200)}`);
+    try {
+      parsed = JSON.parse(normalizedRaw);
+    } catch {
+      throw new Error(`Failed to parse Ollama response as JSON: ${cleaned.substring(0, 200)}`);
+    }
+  }
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new Error(`Failed to parse nested Ollama JSON response: ${parsed.substring(0, 200)}`);
+    }
   }
 
   const parsedKeys = Object.keys(parsed).sort();
@@ -141,9 +466,6 @@ async function suggestCategory(expense, categories) {
   const confidence = parseFloat(parsed.confidence);
   const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning : '';
 
-  if (!Number.isFinite(categoryId) || categoryId <= 0) {
-    throw new Error(`Invalid categoryId in Ollama response: ${parsed.categoryId}`);
-  }
   if (!categoryName) {
     throw new Error(`Invalid categoryName in Ollama response: ${parsed.categoryName}`);
   }
@@ -154,24 +476,37 @@ async function suggestCategory(expense, categories) {
     throw new Error(`Invalid reasoning in Ollama response: ${parsed.reasoning}`);
   }
 
-  const categoryEntry = categories.find((c) => c.id === categoryId);
-  if (!categoryEntry) {
+  const categoryEntryByName = categories.find((c) => c.name === categoryName);
+  const categoryEntryById = categories.find((c) => c.id === categoryId);
+  const resolvedCategory = categoryEntryByName || categoryEntryById;
+  if (!resolvedCategory) {
     throw new Error(
-      `Ollama returned categoryId ${categoryId} which is not in the list of valid categories`
-    );
-  }
-  if (categoryName !== categoryEntry.name) {
-    throw new Error(
-      `Ollama returned mismatched categoryId/categoryName: ${categoryId} -> "${categoryEntry.name}", got "${categoryName}"`
+      `Ollama returned invalid category reference: id=${parsed.categoryId}, name="${categoryName}"`
     );
   }
 
-  return {
-    categoryId,
-    categoryName,
+  const baseSuggestion = {
+    categoryId: resolvedCategory.id,
+    categoryName: resolvedCategory.name,
     confidence,
     reasoning,
   };
+  const groceryAdjusted = applyGroceryMerchantOverride(expense, baseSuggestion, categories);
+  const furnitureAdjusted = applyFurnitureTitleOverride(expense, groceryAdjusted, categories);
+  return applyTitleSemanticGuard(expense, furnitureAdjusted, categories);
 }
 
-module.exports = { healthCheck, suggestCategory, buildPrompt, stripMarkdown };
+module.exports = {
+  healthCheck,
+  suggestCategory,
+  buildPrompt,
+  stripMarkdown,
+  stripThinkingTags,
+  extractFirstJsonObject,
+  getRawModelText,
+  isGroceryLikeCategory,
+  applyGroceryMerchantOverride,
+  isFurnitureLikeCategory,
+  applyFurnitureTitleOverride,
+  applyTitleSemanticGuard,
+};

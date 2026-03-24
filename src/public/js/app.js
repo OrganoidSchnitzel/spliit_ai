@@ -334,8 +334,21 @@ async function loadSettings() {
   }
 }
 
+// ─── App version badge ──────────────────────────────────────────────────────────
+async function loadAppVersion() {
+  const versionEl = document.getElementById('app-version');
+  if (!versionEl) return;
+  try {
+    const s = await fetch('/api/settings').then((r) => r.json());
+    versionEl.textContent = `v${s.appVersion || 'dev'}`;
+  } catch {
+    versionEl.textContent = 'v?';
+  }
+}
+
 // ─── Init ───────────────────────────────────────────────────────────────────────
 loadDashboard();
 if (location.pathname === '/playground') loadPlayground();
 if (location.pathname === '/history') loadHistory();
 if (location.pathname === '/settings') loadSettings();
+loadAppVersion();

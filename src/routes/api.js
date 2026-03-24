@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { version } = require('../../package.json');
 const db = require('../db');
 const ollamaService = require('../services/ollamaService');
 const categorizationService = require('../services/categorizationService');
@@ -171,6 +172,7 @@ router.get('/settings', (_req, res) => {
     confidenceThreshold: config.confidenceThreshold,
     scheduler: config.scheduler,
     processing: config.processing,
+    appVersion: version,
   });
 });
 
