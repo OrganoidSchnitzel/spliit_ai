@@ -1,15 +1,14 @@
 name: Build and Publish Docker Image
 
-# This tells GitHub to build a new image every time you push to main OR publish a new release
+# Triggers on EVERY branch push AND every published release
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ] 
   release:
     types: [ "published" ]
 
 env:
   REGISTRY: ghcr.io
-  # ⚠️ Docker requires this to be 100% lowercase
   IMAGE_NAME: organoidschnitzel/spliit_ai
 
 jobs:
@@ -28,7 +27,6 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # GitHub provides this password automatically, no setup required!
           password: ${{ secrets.GITHUB_TOKEN }} 
 
       - name: Extract metadata (tags, labels) for Docker
@@ -37,8 +35,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            # 1. Always tag with the branch name (e.g., :dev, :main)
             type=ref,event=branch
-            type=raw,value=latest
+            # 2. If it's a release, tag with the release version (e.g., :v0.3)
+            type=ref,event=tag
+            # 3. ONLY update the 'latest' tag if a formal Release was published!
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
