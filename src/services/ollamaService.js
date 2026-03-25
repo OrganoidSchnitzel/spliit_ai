@@ -82,7 +82,12 @@ Categories(id:name): ${categoryList}
 
 Rules:
 - Pick ONE category ID from list
-- German context: Lidl/Rewe/Edeka/Aldi/Kaufland→grocery, Tankstelle→fuel, IKEA/Möbel→furniture
+- German context examples:
+  * Lidl/Rewe/Edeka/Aldi→Groceries
+  * Tankstelle/Shell/Aral→Gas/Fuel
+  * IKEA/Möbel→Furniture
+  * Apotheke/Arzt→Medical Expenses
+  * Deutsche Bahn/Bus→Bus/Train
 - Match by merchant type, not just word similarity
 - Output format:
 {"reasoning":"<why>","categoryName":"<exact name>","categoryId":<id>,"confidence":<0-1>}`;

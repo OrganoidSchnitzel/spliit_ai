@@ -3,11 +3,15 @@
 /**
  * German word lists for fast category matching without LLM calls.
  * These lists contain common German merchant names and keywords that can be matched instantly.
+ *
+ * Categories are mapped to match the Spliit database schema:
+ * https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql
  */
 
 const wordLists = {
+  // Food and Drink (grouping: "Food and Drink")
   groceryStores: {
-    targetCategoryNames: ['Groceries', 'Lebensmittel', 'Supermarket', 'Food', 'Essen'],
+    targetCategoryNames: ['Groceries', 'Food and Drink'],
     keywords: [
       'lidl',
       'rewe',
@@ -24,10 +28,12 @@ const wordLists = {
       'combi',
       'globus',
       'norma',
+      'supermarkt',
+      'lebensmittel',
     ],
   },
   restaurants: {
-    targetCategoryNames: ['Restaurant', 'Restaurants', 'Food & Dining', 'Essen & Trinken', 'Dining'],
+    targetCategoryNames: ['Dining Out', 'Food and Drink'],
     keywords: [
       'mcdonalds',
       'burger king',
@@ -46,10 +52,27 @@ const wordLists = {
       'bäckerei',
       'coffeeshop',
       'starbucks',
+      'mensa',
+      'kantine',
     ],
   },
+  liquor: {
+    targetCategoryNames: ['Liquor', 'Food and Drink'],
+    keywords: [
+      'getränkemarkt',
+      'weinhandlung',
+      'spirituosen',
+      'liquor',
+      'wine shop',
+      'bar',
+      'pub',
+      'kneipe',
+    ],
+  },
+
+  // Transportation (grouping: "Transportation")
   fuelStations: {
-    targetCategoryNames: ['Fuel', 'Gas', 'Petrol', 'Tankstelle', 'Benzin', 'Transportation'],
+    targetCategoryNames: ['Gas/Fuel', 'Transportation'],
     keywords: [
       'shell',
       'aral',
@@ -63,30 +86,18 @@ const wordLists = {
       'gas station',
       'petrol',
       'fuel',
+      'benzin',
+      'diesel',
     ],
   },
-  pharmacies: {
-    targetCategoryNames: ['Pharmacy', 'Apotheke', 'Health', 'Healthcare', 'Medical'],
-    keywords: [
-      'apotheke',
-      'pharmacy',
-      'dm',
-      'rossmann',
-      'müller',
-      'budni',
-      'douglas',
-    ],
-  },
-  transportation: {
-    targetCategoryNames: ['Transportation', 'Transport', 'Travel', 'Verkehr', 'Fahrt'],
+  publicTransport: {
+    targetCategoryNames: ['Bus/Train', 'Transportation'],
     keywords: [
       'deutsche bahn',
       'db',
       'bahn',
       'train',
       'bus',
-      'uber',
-      'taxi',
       'flixbus',
       'mvg',
       'hvv',
@@ -94,10 +105,94 @@ const wordLists = {
       'vrr',
       'öpnv',
       'nahverkehr',
+      'vgn',
+      'rmv',
+      'kvb',
+      'bvg',
+      's-bahn',
+      'u-bahn',
+      'straßenbahn',
+      'tram',
     ],
   },
+  taxi: {
+    targetCategoryNames: ['Taxi', 'Transportation'],
+    keywords: [
+      'uber',
+      'taxi',
+      'lyft',
+      'bolt',
+      'freenow',
+      'mytaxi',
+    ],
+  },
+  hotel: {
+    targetCategoryNames: ['Hotel', 'Transportation'],
+    keywords: [
+      'hotel',
+      'motel',
+      'hostel',
+      'airbnb',
+      'booking',
+      'pension',
+      'unterkunft',
+      'accommodation',
+    ],
+  },
+  parking: {
+    targetCategoryNames: ['Parking', 'Transportation'],
+    keywords: [
+      'parkhaus',
+      'parking',
+      'parkplatz',
+      'park',
+      'tiefgarage',
+    ],
+  },
+  plane: {
+    targetCategoryNames: ['Plane', 'Transportation'],
+    keywords: [
+      'lufthansa',
+      'ryanair',
+      'easyjet',
+      'eurowings',
+      'airline',
+      'flight',
+      'flug',
+      'airport',
+      'flughafen',
+    ],
+  },
+  bicycle: {
+    targetCategoryNames: ['Bicycle', 'Transportation'],
+    keywords: [
+      'fahrrad',
+      'bicycle',
+      'bike',
+      'e-bike',
+      'nextbike',
+      'call a bike',
+      'radstation',
+    ],
+  },
+  car: {
+    targetCategoryNames: ['Car', 'Transportation'],
+    keywords: [
+      'autowerkstatt',
+      'car repair',
+      'werkstatt',
+      'atu',
+      'sixt',
+      'europcar',
+      'car rental',
+      'mietwagen',
+      'autovermietung',
+    ],
+  },
+
+  // Home (grouping: "Home")
   furniture: {
-    targetCategoryNames: ['Furniture', 'Möbel', 'Home', 'Household', 'Haushalt'],
+    targetCategoryNames: ['Furniture', 'Home'],
     keywords: [
       'ikea',
       'möbel',
@@ -109,10 +204,11 @@ const wordLists = {
       'segmüller',
       'xxxlutz',
       'home24',
+      'furniture',
     ],
   },
   electronics: {
-    targetCategoryNames: ['Electronics', 'Elektronik', 'Technology', 'Tech'],
+    targetCategoryNames: ['Electronics', 'Home'],
     keywords: [
       'media markt',
       'mediamarkt',
@@ -123,39 +219,78 @@ const wordLists = {
       'alternate',
       'apple',
       'samsung',
+      'elektronik',
     ],
   },
-  clothing: {
-    targetCategoryNames: ['Clothing', 'Fashion', 'Kleidung', 'Mode'],
+  householdSupplies: {
+    targetCategoryNames: ['Household Supplies', 'Home'],
     keywords: [
-      'h&m',
-      'zara',
-      'c&a',
-      'primark',
-      'new yorker',
-      'esprit',
-      'peek & cloppenburg',
-      'galeria',
-      'breuninger',
-      'zalando',
+      'dm',
+      'rossmann',
+      'müller',
+      'drogerie',
+      'drugstore',
+      'haushaltswaren',
+      'reinigung',
+      'cleaning supplies',
     ],
   },
-  healthFitness: {
-    targetCategoryNames: ['Health', 'Fitness', 'Sport', 'Gym', 'Gesundheit'],
+  pets: {
+    targetCategoryNames: ['Pets', 'Home'],
     keywords: [
-      'fitnessstudio',
-      'gym',
-      'mcfit',
-      'fitness first',
-      'clever fit',
-      'john reed',
-      'kieser',
-      'yoga',
-      'pilates',
+      'fressnapf',
+      'zoo zajac',
+      'tierarzt',
+      'veterinary',
+      'tierbedarf',
+      'pet',
+      'haustier',
     ],
   },
+  maintenance: {
+    targetCategoryNames: ['Maintenance', 'Home'],
+    keywords: [
+      'handwerker',
+      'reparatur',
+      'repair',
+      'maintenance',
+      'wartung',
+      'instandhaltung',
+    ],
+  },
+  rent: {
+    targetCategoryNames: ['Rent', 'Home'],
+    keywords: [
+      'miete',
+      'rent',
+      'wohnungsmiete',
+      'kaltmiete',
+      'warmmiete',
+    ],
+  },
+  mortgage: {
+    targetCategoryNames: ['Mortgage', 'Home'],
+    keywords: [
+      'hypothek',
+      'mortgage',
+      'baudarlehen',
+      'immobilienkredit',
+    ],
+  },
+  homeServices: {
+    targetCategoryNames: ['Services', 'Home'],
+    keywords: [
+      'gartenpflege',
+      'gebäudereinigung',
+      'schornsteinfeger',
+      'hausmeister',
+      'home service',
+    ],
+  },
+
+  // Entertainment (grouping: "Entertainment")
   entertainment: {
-    targetCategoryNames: ['Entertainment', 'Unterhaltung', 'Leisure', 'Fun'],
+    targetCategoryNames: ['Entertainment', 'Movies', 'Music'],
     keywords: [
       'kino',
       'cinema',
@@ -169,10 +304,223 @@ const wordLists = {
       'museum',
       'theater',
       'zoo',
+      'concert',
+      'konzert',
+      'streaming',
     ],
   },
+  games: {
+    targetCategoryNames: ['Games', 'Entertainment'],
+    keywords: [
+      'steam',
+      'playstation',
+      'xbox',
+      'nintendo',
+      'gamestop',
+      'epic games',
+      'gaming',
+      'videospiel',
+    ],
+  },
+  sports: {
+    targetCategoryNames: ['Sports', 'Entertainment'],
+    keywords: [
+      'sportstudio',
+      'sportverein',
+      'stadion',
+      'arena',
+      'sports',
+      'decathlon',
+      'sport',
+      'intersport',
+    ],
+  },
+
+  // Life (grouping: "Life")
+  clothing: {
+    targetCategoryNames: ['Clothing', 'Life'],
+    keywords: [
+      'h&m',
+      'zara',
+      'c&a',
+      'primark',
+      'new yorker',
+      'esprit',
+      'peek & cloppenburg',
+      'galeria',
+      'breuninger',
+      'zalando',
+      'kleidung',
+      'fashion',
+      'mode',
+    ],
+  },
+  medicalExpenses: {
+    targetCategoryNames: ['Medical Expenses', 'Life'],
+    keywords: [
+      'apotheke',
+      'pharmacy',
+      'arzt',
+      'doctor',
+      'krankenhaus',
+      'hospital',
+      'klinik',
+      'clinic',
+      'zahnarzt',
+      'dentist',
+      'physiotherapie',
+      'physiotherapy',
+      'orthopäde',
+    ],
+  },
+  insurance: {
+    targetCategoryNames: ['Insurance', 'Life'],
+    keywords: [
+      'versicherung',
+      'insurance',
+      'krankenkasse',
+      'health insurance',
+      'haftpflicht',
+      'liability',
+      'allianz',
+      'axa',
+      'ergo',
+    ],
+  },
+  gifts: {
+    targetCategoryNames: ['Gifts', 'Life'],
+    keywords: [
+      'geschenk',
+      'gift',
+      'present',
+      'blumen',
+      'flowers',
+      'geschenkgutschein',
+    ],
+  },
+  education: {
+    targetCategoryNames: ['Education', 'Life'],
+    keywords: [
+      'schule',
+      'school',
+      'universität',
+      'university',
+      'uni',
+      'bildung',
+      'education',
+      'kurs',
+      'course',
+      'seminar',
+      'studiengebühren',
+      'tuition',
+    ],
+  },
+  childcare: {
+    targetCategoryNames: ['Childcare', 'Life'],
+    keywords: [
+      'kindergarten',
+      'kita',
+      'kinderbetreuung',
+      'childcare',
+      'daycare',
+      'babysitter',
+    ],
+  },
+  donation: {
+    targetCategoryNames: ['Donation', 'Life'],
+    keywords: [
+      'spende',
+      'donation',
+      'charity',
+      'wohltätigkeit',
+      'fundraising',
+    ],
+  },
+  taxes: {
+    targetCategoryNames: ['Taxes', 'Life'],
+    keywords: [
+      'steuer',
+      'tax',
+      'finanzamt',
+      'steuererklärung',
+      'einkommensteuer',
+    ],
+  },
+
+  // Utilities (grouping: "Utilities")
+  electricity: {
+    targetCategoryNames: ['Electricity', 'Utilities'],
+    keywords: [
+      'strom',
+      'electricity',
+      'eon',
+      'vattenfall',
+      'stadtwerke',
+      'energieversorger',
+    ],
+  },
+  heatGas: {
+    targetCategoryNames: ['Heat/Gas', 'Utilities'],
+    keywords: [
+      'gas',
+      'heizung',
+      'heating',
+      'fernwärme',
+      'district heating',
+    ],
+  },
+  water: {
+    targetCategoryNames: ['Water', 'Utilities'],
+    keywords: [
+      'wasser',
+      'water',
+      'wasserwerk',
+      'wasserbetrieb',
+    ],
+  },
+  internet: {
+    targetCategoryNames: ['TV/Phone/Internet', 'Utilities'],
+    keywords: [
+      'telekom',
+      'vodafone',
+      'o2',
+      '1&1',
+      'telefon',
+      'phone',
+      'internet',
+      'mobilfunk',
+      'mobile',
+      'kabel',
+      'cable',
+      'tv',
+      'netflix',
+      'streaming',
+    ],
+  },
+  trash: {
+    targetCategoryNames: ['Trash', 'Utilities'],
+    keywords: [
+      'müll',
+      'trash',
+      'garbage',
+      'abfall',
+      'müllabfuhr',
+      'entsorgung',
+    ],
+  },
+  cleaning: {
+    targetCategoryNames: ['Cleaning', 'Utilities'],
+    keywords: [
+      'reinigung',
+      'cleaning',
+      'putzfrau',
+      'gebäudereinigung',
+    ],
+  },
+
+  // Hardware/DIY (grouping: "Home")
   hardware: {
-    targetCategoryNames: ['Hardware', 'DIY', 'Home Improvement', 'Baumarkt'],
+    targetCategoryNames: ['Maintenance', 'Home'],
     keywords: [
       'bauhaus',
       'obi',
@@ -182,6 +530,8 @@ const wordLists = {
       'baumarkt',
       'werkzeug',
       'heimwerker',
+      'diy',
+      'hardware store',
     ],
   },
 };

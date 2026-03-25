@@ -84,7 +84,7 @@ describe('ollamaService.buildPrompt', () => {
   it('includes explicit German-language guidance', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     expect(prompt).toContain('German context');
-    expect(prompt).toContain('Lidl/Rewe/Edeka/Aldi/Kaufland');
+    expect(prompt).toContain('Lidl/Rewe/Edeka/Aldi');
   });
 
   it('uses optimized compact format without few-shot examples', () => {
