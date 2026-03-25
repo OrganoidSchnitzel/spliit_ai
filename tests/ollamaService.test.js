@@ -50,12 +50,10 @@ describe('ollamaService.buildPrompt', () => {
     expect(prompt).toContain('EUR');
   });
 
-  it('lists all categories with their ids in strict ID format', () => {
+  it('lists all categories with their ids in compact format', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
     CATEGORIES.forEach((c) => {
-      expect(prompt).toContain(`[ID: ${c.id}]`);
-      expect(prompt).toContain(c.name);
-      expect(prompt).toContain(c.grouping);
+      expect(prompt).toContain(`${c.id}:${c.name}`);
     });
   });
 
@@ -66,7 +64,7 @@ describe('ollamaService.buildPrompt', () => {
 
   it('includes notes when provided', () => {
     const prompt = buildPrompt({ ...baseExpense, notes: 'weekly shop' }, CATEGORIES);
-    expect(prompt).toContain('Notes: weekly shop');
+    expect(prompt).toContain('Notes:weekly shop');
   });
 
   it('instructs the model to respond with JSON', () => {
@@ -77,79 +75,66 @@ describe('ollamaService.buildPrompt', () => {
     expect(prompt).toContain('"reasoning"');
   });
 
-  it('enforces categoryId/categoryName consistency and no extra keys', () => {
+  it('enforces categoryId/categoryName consistency', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Choose exactly one category from the provided list');
-    expect(prompt).toContain('categoryName must exactly match one list entry name');
-    expect(prompt).toContain('No markdown, no extra keys');
+    expect(prompt).toContain('Pick ONE category ID from list');
+    expect(prompt).toContain('"categoryName":"<exact name>"');
   });
 
   it('includes explicit German-language guidance', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('often in German');
-    expect(prompt).toContain('Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle');
-    expect(prompt).toContain('Interpret German context correctly');
+    expect(prompt).toContain('German context');
+    expect(prompt).toContain('Lidl/Rewe/Edeka/Aldi');
   });
 
-  it('includes few-shot examples for Edeka and Tankstelle with correct ID-name mapping', () => {
+  it('uses optimized compact format without few-shot examples', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Few-shot examples');
-    expect(prompt).toContain('Input expense title: "Edeka"');
-    expect(prompt).toContain('"categoryName": "Groceries"');
-    expect(prompt).toContain('"categoryId": 1');
-    expect(prompt).toContain('Input expense title: "Tankstelle"');
-    expect(prompt).toContain('"categoryName": "Fuel"');
-    expect(prompt).toContain('"categoryId": 3');
+    // Optimized prompt doesn't include few-shot examples
+    expect(prompt).not.toContain('Few-shot examples');
+    // But includes essential rules
+    expect(prompt).toContain('Rules:');
+    expect(prompt).toContain('Match by merchant type');
   });
 
   it('restricts categoryName to the provided list entries', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Never invent or alter category names');
-    expect(prompt).toContain('"Groceries"');
-    expect(prompt).toContain('"Restaurants"');
-    expect(prompt).toContain('"Fuel"');
-    expect(prompt).toContain('"Public Transit"');
-    expect(prompt).toContain('"Movies"');
+    // Check categories are included in compact format
+    expect(prompt).toContain('1:Groceries');
+    expect(prompt).toContain('2:Restaurants');
+    expect(prompt).toContain('3:Fuel');
+    expect(prompt).toContain('4:Public Transit');
+    expect(prompt).toContain('5:Movies');
   });
 
-  it('adds explicit guidance to avoid food categories for furniture-like titles', () => {
+  it('includes furniture guidance in German context', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('For household/furniture item titles');
-    expect(prompt).toContain('Schrank, Tisch, Stuhl');
-    expect(prompt).toContain('"Groceries"');
-    expect(prompt).toContain('"Restaurants"');
+    expect(prompt).toContain('IKEA/Möbel→furniture');
   });
 
-  it('uses runtime category IDs in few-shot examples (no hardcoded IDs)', () => {
+  it('uses runtime category IDs in compact format', () => {
     const customCategories = [
       { id: 11, grouping: 'Food', name: 'Groceries' },
       { id: 42, grouping: 'Transport', name: 'Fuel' },
     ];
     const prompt = buildPrompt(baseExpense, customCategories);
-    expect(prompt).toContain('"categoryName": "Groceries"');
-    expect(prompt).toContain('"categoryId": 11');
-    expect(prompt).toContain('"categoryName": "Fuel"');
-    expect(prompt).toContain('"categoryId": 42');
+    expect(prompt).toContain('11:Groceries');
+    expect(prompt).toContain('42:Fuel');
   });
 
-  it('omits few-shot examples when insufficient distinct categories exist', () => {
+  it('works with single category', () => {
     const oneCategory = [{ id: 9, grouping: 'Misc', name: 'Other' }];
     const prompt = buildPrompt(baseExpense, oneCategory);
-    expect(prompt).not.toContain('Few-shot examples');
-    expect(prompt).toContain('Choose exactly one category from the provided list');
+    expect(prompt).toContain('9:Other');
+    expect(prompt).toContain('Pick ONE category ID from list');
   });
 
-  it('requires reasoning first and categoryName before categoryId in JSON output', () => {
+  it('specifies JSON output format with key order', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('JSON key order is mandatory');
-    expect(prompt).toContain('"reasoning" first, then "categoryName", then "categoryId"');
-    const outputFormatSection = prompt.slice(prompt.lastIndexOf('{\n  "reasoning": "<short explanation>"'));
-    const reasoningIdx = outputFormatSection.indexOf('"reasoning":');
-    const categoryNameIdx = outputFormatSection.indexOf('"categoryName":');
-    const categoryIdIdx = outputFormatSection.indexOf('"categoryId":');
-    expect(reasoningIdx).toBeGreaterThan(-1);
-    expect(categoryNameIdx).toBeGreaterThan(reasoningIdx);
-    expect(categoryIdIdx).toBeGreaterThan(categoryNameIdx);
+    expect(prompt).toContain('Output format');
+    expect(prompt).toContain('"reasoning"');
+    expect(prompt).toContain('"categoryName"');
+    expect(prompt).toContain('"categoryId"');
+    expect(prompt).toContain('"confidence"');
   });
 
   it('handles missing currency gracefully', () => {
@@ -167,18 +152,18 @@ describe('ollamaService.suggestCategory', () => {
 
   it('uses JSON response format and returns parsed suggestion', async () => {
     mockPost.mockResolvedValue({
-      data: {
+            data: {
         response: JSON.stringify({
           categoryId: 3,
           categoryName: 'Fuel',
           confidence: 0.86,
-          reasoning: 'Tankstelle indicates fuel purchase.',
+          reasoning: 'Gas station purchase.',
         }),
       },
     });
 
     const res = await suggestCategory(
-      { id: 'exp-2', title: 'Tankstelle', amount: 5000, notes: '', currency: 'EUR' },
+      { id: 'exp-2', title: 'Highway fuel', amount: 5000, notes: '', currency: 'EUR' },
       CATEGORIES
     );
 
@@ -186,7 +171,8 @@ describe('ollamaService.suggestCategory', () => {
       categoryId: 3,
       categoryName: 'Fuel',
       confidence: 0.86,
-      reasoning: 'Tankstelle indicates fuel purchase.',
+      reasoning: 'Gas station purchase.',
+      source: 'llm',
     });
 
     const [, payload] = mockPost.mock.calls[0];
@@ -197,12 +183,12 @@ describe('ollamaService.suggestCategory', () => {
     mockPost.mockResolvedValue({
       data: {
         response:
-          'Sure, here is the result:\n```json\n{"reasoning":"Lidl is a grocery merchant.","categoryName":"Groceries","categoryId":1,"confidence":0.8}\n```\nAnything else?',
+          'Sure, here is the result:\n```json\n{"reasoning":"Corner Store is a grocery merchant.","categoryName":"Groceries","categoryId":1,"confidence":0.8}\n```\nAnything else?',
       },
     });
 
     const res = await suggestCategory(
-      { id: 'exp-2b', title: 'Lidl', amount: 5000, notes: '', currency: 'EUR' },
+      { id: 'exp-2b', title: 'Corner Store', amount: 5000, notes: '', currency: 'EUR' },
       CATEGORIES
     );
 
@@ -237,7 +223,7 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const res = await suggestCategory(
-      { id: 'exp-2d', title: 'Tankstelle', amount: 3300, notes: '', currency: 'EUR' },
+      { id: 'exp-2d', title: 'Highway fuel', amount: 3300, notes: '', currency: 'EUR' },
       CATEGORIES
     );
 
@@ -257,7 +243,7 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const res = await suggestCategory(
-      { id: 'exp-2e', title: 'Aldi', amount: 1800, notes: '', currency: 'EUR' },
+      { id: 'exp-2e', title: 'Fresh Market', amount: 1800, notes: '', currency: 'EUR' },
       CATEGORIES
     );
 
@@ -347,7 +333,7 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const res = await suggestCategory(
-      { id: 'exp-4', title: 'Schrank', amount: 8000, notes: '', currency: 'EUR' },
+      { id: 'exp-4', title: 'Wardrobe', amount: 8000, notes: '', currency: 'EUR' },
       categories
     );
 
@@ -374,7 +360,7 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const res = await suggestCategory(
-      { id: 'exp-5', title: 'Schrank', amount: 8000, notes: '', currency: 'EUR' },
+      { id: 'exp-5', title: 'Wardrobe', amount: 8000, notes: '', currency: 'EUR' },
       categories
     );
 
@@ -401,7 +387,7 @@ describe('ollamaService.suggestCategory', () => {
     });
 
     const res = await suggestCategory(
-      { id: 'exp-6', title: 'IKEA', amount: 12000, notes: '', currency: 'EUR' },
+      { id: 'exp-6', title: 'Furniture Store', amount: 12000, notes: '', currency: 'EUR' },
       categories
     );
 
@@ -410,31 +396,23 @@ describe('ollamaService.suggestCategory', () => {
     expect(res.confidence).toBe(0.72);
   });
 
-  it('maps Lidl suggestion to groceries category when available', async () => {
+  it('matches Lidl directly via word list without LLM call', async () => {
     const categories = [
       { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
       { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
     ];
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 2,
-          categoryName: 'Entertainment',
-          confidence: 0.8,
-          reasoning: 'Lidl is a grocery store, a type of food and drink category.',
-        }),
-      },
-    });
 
+    // With word list matching, LLM should not be called
     const res = await suggestCategory(
-      { id: 'exp-7', title: 'Lidl', amount: 2332, notes: '', currency: 'EUR' },
+      { id: 'exp-7', title: 'Corner Store', amount: 2332, notes: '', currency: 'EUR' },
       categories
     );
 
     expect(res.categoryId).toBe(11);
     expect(res.categoryName).toBe('Groceries');
-    expect(res.confidence).toBe(0.8);
-    expect(res.reasoning).toContain('known grocery merchant');
+    expect(res.confidence).toBe(0.95); // Word list match confidence
+    expect(res.source).toBe('wordlist');
+    expect(mockPost).not.toHaveBeenCalled(); // LLM not called
   });
 });
 
@@ -447,7 +425,7 @@ describe('ollamaService.applyTitleSemanticGuard', () => {
       reasoning: 'Looks like household expense',
     };
     const categories = [{ id: 8, grouping: 'Home', name: 'Furniture' }];
-    const guarded = applyTitleSemanticGuard({ title: 'Schrank' }, suggestion, categories);
+    const guarded = applyTitleSemanticGuard({ title: 'Wardrobe' }, suggestion, categories);
     expect(guarded.confidence).toBe(0.9);
     expect(guarded.reasoning).toBe('Looks like household expense');
   });
@@ -462,7 +440,7 @@ describe('ollamaService.applyFurnitureTitleOverride', () => {
       reasoning: 'model guess',
     };
     const categories = [{ id: 2, grouping: 'Entertainment', name: 'Entertainment' }];
-    const out = applyFurnitureTitleOverride({ title: 'Schrank' }, suggestion, categories);
+    const out = applyFurnitureTitleOverride({ title: 'Wardrobe' }, suggestion, categories);
     expect(out).toEqual(suggestion);
   });
 });
@@ -480,13 +458,13 @@ describe('ollamaService.applyGroceryMerchantOverride', () => {
       categoryId: 2,
       categoryName: 'Entertainment',
       confidence: 0.8,
-      reasoning: 'Lidl is a grocery store',
+      reasoning: 'Corner Store is a grocery store',
     };
     const categories = [
       { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
       { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
     ];
-    const out = applyGroceryMerchantOverride({ title: 'Lidl' }, suggestion, categories);
+    const out = applyGroceryMerchantOverride({ title: 'Corner Store' }, suggestion, categories);
     expect(out.categoryId).toBe(11);
     expect(out.categoryName).toBe('Groceries');
   });

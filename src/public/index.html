@@ -158,10 +158,46 @@
     <!-- ─── Settings ─────────────────────────────────── -->
     <section id="page-settings" class="hidden">
       <h1 class="page-title">Settings</h1>
-      <p class="page-subtitle">Current configuration. Edit <code>.env</code> and restart to change.</p>
+      <p class="page-subtitle">Configure categorization behavior and word lists.</p>
 
       <div class="settings-grid" id="settings-content">
         <div class="loading">Loading…</div>
+      </div>
+
+      <!-- Prompt Template Editor -->
+      <div class="settings-section">
+        <h2>Prompt Template</h2>
+        <p class="section-desc">Customize the LLM prompt. Use placeholders: {{title}}, {{amount}}, {{notes}}, {{categories}}</p>
+        <textarea id="prompt-template" class="form-control" rows="10" placeholder="Loading..."></textarea>
+        <div class="button-row">
+          <button class="btn btn-primary" id="btn-save-prompt">💾 Save Prompt</button>
+          <button class="btn btn-secondary" id="btn-reset-prompt">🔄 Reset to Default</button>
+        </div>
+        <div id="prompt-alert" class="alert hidden"></div>
+      </div>
+
+      <!-- Word Lists Manager -->
+      <div class="settings-section">
+        <h2>German Word Lists</h2>
+        <p class="section-desc">Manage keywords for fast category matching (checked before calling LLM).</p>
+
+        <div class="wordlist-selector">
+          <label for="wordlist-select">Category List:</label>
+          <select id="wordlist-select" class="form-control">
+            <option value="">— select a list —</option>
+          </select>
+        </div>
+
+        <div id="wordlist-content" class="wordlist-content hidden">
+          <h3 id="wordlist-name">—</h3>
+          <div class="keyword-list" id="keyword-list"></div>
+
+          <div class="add-keyword-row">
+            <input type="text" id="new-keyword" class="form-control" placeholder="Add new keyword...">
+            <button class="btn btn-success" id="btn-add-keyword">+ Add</button>
+          </div>
+        </div>
+        <div id="wordlist-alert" class="alert hidden"></div>
       </div>
     </section>
   </main>
