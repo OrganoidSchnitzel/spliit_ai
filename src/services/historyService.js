@@ -40,6 +40,59 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+
+const DEFAULT_CATEGORY_PROMPT_TEMPLATE = `You are an expense categorization assistant for Spliit.
+You must always return valid JSON only.
+
+Rules:
+1) Choose exactly one category from the provided list.
+2) categoryName must exactly match one list entry name. categoryId must be the exact ID of that same entry.
+3) Expense titles and notes are often in German (for example: Lidl, Rewe, Edeka, Aldi, Kaufland, Tankstelle). Interpret German context correctly before mapping to a category.
+4) If uncertain, pick the best matching category and lower confidence.
+5) JSON key order is mandatory: output "reasoning" first, then "categoryName", then "categoryId", then "confidence".
+6) Never invent or alter category names. categoryName MUST be one of: {{ALLOWED_NAMES}}.
+7) Reasoning must describe the spending type first (e.g., groceries, fuel, furniture), then map that type to the closest category from the list.
+8) Do not map by superficial word overlap. First infer what was purchased or the merchant type, then choose the closest category from the list.
+9) For household/furniture item titles (e.g., Schrank, Tisch, Stuhl), avoid food-related categories unless the merchant clearly indicates food service or groceries{{FOOD_LIKE_NAMES}}.
+
+{{EXAMPLE_SECTION}}
+
+Expense:
+  Title: {{TITLE}}
+  Amount: {{AMOUNT}}{{NOTES_PART}}
+
+Available categories:
+{{CATEGORY_LIST}}
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "reasoning": "<short explanation>",
+  "categoryName": "<exact category name from the list above>",
+  "categoryId": <integer id from the list above that exactly matches categoryName>,
+  "confidence": <float between 0 and 1>
+}
+No markdown, no extra keys.`;
+
+const DEFAULT_DETERMINISTIC_CATEGORY_RULES = [
+  { keyword: 'lidl', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Lidl is a supermarket.' },
+  { keyword: 'rewe', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Rewe is a supermarket.' },
+  { keyword: 'edeka', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Edeka is a supermarket.' },
+  { keyword: 'aldi', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Aldi is a supermarket.' },
+  { keyword: 'kaufland', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Kaufland is a supermarket.' },
+  { keyword: 'penny', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Penny is a supermarket.' },
+  { keyword: 'netto', categoryPattern: 'grocer|grocery|supermarket|lebensmittel', reasoning: 'Netto is a supermarket.' },
+  { keyword: 'dm', categoryPattern: 'drogerie|drug|personal care|health|household', reasoning: 'dm is a drugstore.' },
+  { keyword: 'rossmann', categoryPattern: 'drogerie|drug|personal care|health|household', reasoning: 'Rossmann is a drugstore.' },
+  { keyword: 'ikea', categoryPattern: 'möbel|moebel|furniture|home|household|living|interior|wohnung|wohnen', reasoning: 'IKEA is furniture/home retail.' },
+];
+
 /**
  * Record the result of a categorization attempt.
  * @param {object} params
@@ -121,4 +174,52 @@ function getStats() {
   return row;
 }
 
-module.exports = { recordResult, getHistory, getStats };
+function getSettingValue(key) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : null;
+}
+
+function setSettingValue(key, value) {
+  const stmt = db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `);
+  stmt.run(key, value);
+}
+
+function getCategorizationPromptTemplate() {
+  const value = getSettingValue('categorizationPromptTemplate');
+  return value || DEFAULT_CATEGORY_PROMPT_TEMPLATE;
+}
+
+function setCategorizationPromptTemplate(value) {
+  setSettingValue('categorizationPromptTemplate', value);
+}
+
+function getDeterministicCategoryRules() {
+  const value = getSettingValue('deterministicCategoryRules');
+  if (!value) return DEFAULT_DETERMINISTIC_CATEGORY_RULES;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : DEFAULT_DETERMINISTIC_CATEGORY_RULES;
+  } catch {
+    return DEFAULT_DETERMINISTIC_CATEGORY_RULES;
+  }
+}
+
+function setDeterministicCategoryRules(rules) {
+  setSettingValue('deterministicCategoryRules', JSON.stringify(rules));
+}
+
+module.exports = {
+  recordResult,
+  getHistory,
+  getStats,
+  getCategorizationPromptTemplate,
+  setCategorizationPromptTemplate,
+  getDeterministicCategoryRules,
+  setDeterministicCategoryRules,
+  DEFAULT_CATEGORY_PROMPT_TEMPLATE,
+  DEFAULT_DETERMINISTIC_CATEGORY_RULES,
+};

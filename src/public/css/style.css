@@ -258,3 +258,24 @@ body {
 }
 .settings-label { color: var(--text-muted); }
 .settings-val   { font-weight: 500; font-family: monospace; }
+.settings-help {
+  color: var(--text-muted);
+  font-size: .85rem;
+  margin-bottom: .6rem;
+}
+.settings-textarea {
+  min-height: 180px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.settings-list {
+  padding-left: 1.2rem;
+  color: var(--text);
+  font-size: .9rem;
+}
+.settings-list li {
+  margin-bottom: .4rem;
+}
