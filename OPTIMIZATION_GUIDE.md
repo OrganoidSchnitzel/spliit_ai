@@ -318,19 +318,58 @@ curl -X DELETE http://localhost:3000/api/wordlists/groceryStores/keywords/your_s
 
 ### Built-in Word Lists
 
-The following categories have pre-configured German word lists:
+The following categories have pre-configured German word lists mapped to official [Spliit categories](https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql):
 
-1. **groceryStores**: Supermarkets and grocery stores
-2. **restaurants**: Restaurants, cafes, fast food
-3. **fuelStations**: Gas stations and fuel
-4. **pharmacies**: Pharmacies and drugstores
-5. **transportation**: Public transport, taxis, trains
-6. **furniture**: Furniture stores and home goods
-7. **electronics**: Electronics and tech stores
-8. **clothing**: Clothing and fashion stores
-9. **healthFitness**: Gyms and fitness centers
-10. **entertainment**: Cinemas, streaming services, museums
-11. **hardware**: DIY and hardware stores
+#### Food and Drink
+1. **groceryStores**: Lidl, Rewe, Edeka, Aldi, Kaufland, Netto, Penny → `Groceries`, `Food and Drink`
+2. **restaurants**: McDonald's, Burger King, cafes, pizzerias, bakeries → `Dining Out`, `Food and Drink`
+3. **liquor**: Getränkemarkt, wine shops, bars, pubs → `Liquor`, `Food and Drink`
+
+#### Transportation
+4. **fuelStations**: Shell, Aral, Esso, Total, tankstelle → `Gas/Fuel`, `Transportation`
+5. **publicTransport**: Deutsche Bahn, MVG, FlixBus, S-Bahn, U-Bahn → `Bus/Train`, `Transportation`
+6. **taxi**: Uber, taxi services, FreeNow → `Taxi`, `Transportation`
+7. **hotel**: Hotels, Airbnb, hostels, pensions → `Hotel`, `Transportation`
+8. **parking**: Parkhaus, parking lots → `Parking`, `Transportation`
+9. **plane**: Lufthansa, Ryanair, airports → `Plane`, `Transportation`
+10. **bicycle**: Fahrrad, bike rentals, NextBike → `Bicycle`, `Transportation`
+11. **car**: Auto repair shops, car rentals, Sixt → `Car`, `Transportation`
+
+#### Home
+12. **furniture**: IKEA, Möbel stores, Poco, Roller → `Furniture`, `Home`
+13. **electronics**: Media Markt, Saturn, Conrad, Apple → `Electronics`, `Home`
+14. **householdSupplies**: DM, Rossmann, Müller, drugstores → `Household Supplies`, `Home`
+15. **pets**: Fressnapf, veterinary, pet supplies → `Pets`, `Home`
+16. **maintenance**: Handwerker, repair services → `Maintenance`, `Home`
+17. **rent**: Miete, Wohnungsmiete → `Rent`, `Home`
+18. **mortgage**: Hypothek, Baudarlehen → `Mortgage`, `Home`
+19. **homeServices**: Gartenpflege, cleaning services → `Services`, `Home`
+20. **hardware**: Bauhaus, OBI, Hornbach, DIY stores → `Maintenance`, `Home`
+
+#### Entertainment
+21. **entertainment**: Kino, Netflix, Spotify, museums, concerts → `Entertainment`, `Movies`, `Music`
+22. **games**: Steam, PlayStation, Xbox, GameStop → `Games`, `Entertainment`
+23. **sports**: Sportstudio, Decathlon, sports venues → `Sports`, `Entertainment`
+
+#### Life
+24. **clothing**: H&M, Zara, C&A, Zalando → `Clothing`, `Life`
+25. **medicalExpenses**: Apotheke, Arzt, Krankenhaus, Zahnarzt → `Medical Expenses`, `Life`
+26. **insurance**: Versicherung, Krankenkasse, Allianz → `Insurance`, `Life`
+27. **gifts**: Geschenk, flowers, gift vouchers → `Gifts`, `Life`
+28. **education**: Schule, Universität, courses → `Education`, `Life`
+29. **childcare**: Kindergarten, Kita, babysitter → `Childcare`, `Life`
+30. **donation**: Spende, charity, fundraising → `Donation`, `Life`
+31. **taxes**: Steuer, Finanzamt → `Taxes`, `Life`
+
+#### Utilities
+32. **electricity**: Strom, EON, Vattenfall, Stadtwerke → `Electricity`, `Utilities`
+33. **heatGas**: Gas, Heizung, district heating → `Heat/Gas`, `Utilities`
+34. **water**: Wasser, Wasserwerk → `Water`, `Utilities`
+35. **internet**: Telekom, Vodafone, internet, phone, TV → `TV/Phone/Internet`, `Utilities`
+36. **trash**: Müll, garbage collection → `Trash`, `Utilities`
+37. **cleaning**: Reinigung, cleaning services → `Cleaning`, `Utilities`
+
+**Total**: 37 specialized word lists with 200+ German keywords covering all Spliit category groupings.
 
 ---
 

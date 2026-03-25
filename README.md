@@ -191,7 +191,7 @@ Tests use [Jest](https://jestjs.io/) with all external services mocked (no live 
 
 1. **Scheduler** fires according to `SCHEDULER_CRON` (default every 15 minutes).
 2. **categorizationService** queries the database for expenses with `categoryId = 0` (uncategorized), up to `BATCH_SIZE`.
-3. **Word list matching** – first checks if the expense title matches any German keywords (e.g., "Lidl" → Groceries). If matched, returns immediately with high confidence (0.95) without calling the LLM.
+3. **Word list matching** – first checks if the expense title matches any German keywords across 37 specialized lists (e.g., "Lidl" → Groceries, "Deutsche Bahn" → Bus/Train). If matched, returns immediately with high confidence (0.95) without calling the LLM. Covers all official [Spliit categories](https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql).
 4. **ollamaService** (if no word list match) builds an optimized prompt containing the expense details and available categories, then calls the Ollama `/api/generate` endpoint with `format: "json"` to force structured output.
 5. The response is parsed and validated. If `confidence ≥ CONFIDENCE_THRESHOLD`, the category is written to the database immediately. Otherwise, it is left for manual review via the Playground.
 6. Every attempt (applied, low confidence, or error) is recorded in the **processing history** (SQLite, `data/history.db`).
