@@ -345,7 +345,7 @@ function escapeSelectorValue(value) {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(str);
   }
-  return str.replace(/["\\]/g, '\\$&');
+  return str.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch.codePointAt(0).toString(16)} `);
 }
 
 async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
@@ -367,7 +367,9 @@ async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
   } catch (err) {
     showAlert('history-alert', `Request failed: ${err.message}`, 'error');
   } finally {
-    buttonEl.disabled = false;
+    if (buttonEl && buttonEl.isConnected) {
+      buttonEl.disabled = false;
+    }
   }
 }
 
