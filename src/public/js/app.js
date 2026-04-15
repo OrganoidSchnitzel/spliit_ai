@@ -333,11 +333,19 @@ function bindHistoryActions() {
     btn.addEventListener('click', async (e) => {
       const expenseId = e.currentTarget.getAttribute('data-expense-id');
       const rowId = e.currentTarget.getAttribute('data-row-id');
-      const select = document.querySelector(`.history-category-select[data-row-id="${rowId}"]`);
+      const select = document.querySelector(`.history-category-select[data-row-id="${escapeSelectorValue(rowId)}"]`);
       if (!select || !select.value) return;
       await applyHistoryCategory(expenseId, Number(select.value), e.currentTarget);
     });
   });
+}
+
+function escapeSelectorValue(value) {
+  const str = String(value);
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(str);
+  }
+  return str.replace(/["\\\]]/g, '\\$&');
 }
 
 async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
