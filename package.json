@@ -1,6 +1,6 @@
 {
   "name": "spliit-ai",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automatic expense categorization for Spliit using local LLMs via Ollama",
   "main": "src/app.js",
   "scripts": {

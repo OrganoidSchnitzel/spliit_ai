@@ -271,8 +271,12 @@ function playgroundFor(expenseId) {
 // ─── History ───────────────────────────────────────────────────────────────────
 async function loadHistory() {
   try {
-    const res = await fetch('/api/history?limit=100').then((r) => r.json());
+    const [res, catRes] = await Promise.all([
+      fetch('/api/history?limit=100').then((r) => r.json()),
+      fetch('/api/categories').then((r) => r.json()),
+    ]);
     const { history: rows = [], stats = {} } = res;
+    const categories = catRes.categories || [];
 
     document.getElementById('hist-total').textContent   = stats.total ?? '—';
     document.getElementById('hist-applied').textContent = stats.applied ?? '—';
@@ -300,9 +304,62 @@ async function loadHistory() {
         <td>${esc(r.category_name || (r.category_id ? `#${r.category_id}` : '—'))}</td>
         <td>${r.confidence != null ? confidenceBadge(r.confidence) : '—'}</td>
         <td>${statusBadge(r.status)}</td>
+        <td>${historyActionCell(r, categories)}</td>
       </tr>`).join('');
+
+    bindHistoryActions();
   } catch (err) {
     console.error('History load error:', err);
+  }
+}
+
+function historyActionCell(row, categories) {
+  if (!row.expense_id || categories.length === 0) return '—';
+  const options = categories
+    .map((c) => `<option value="${c.id}" ${c.id === row.category_id ? 'selected' : ''}>[${esc(c.grouping)}] ${esc(c.name)}</option>`)
+    .join('');
+  return `
+    <div class="history-action-row">
+      <select class="form-control history-category-select" data-row-id="${row.id}">
+        ${options}
+      </select>
+      <button class="btn btn-sm btn-success history-apply-btn" data-expense-id="${esc(row.expense_id)}" data-row-id="${row.id}">Apply</button>
+    </div>
+  `;
+}
+
+function bindHistoryActions() {
+  document.querySelectorAll('.history-apply-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const expenseId = e.currentTarget.getAttribute('data-expense-id');
+      const rowId = e.currentTarget.getAttribute('data-row-id');
+      const select = document.querySelector(`.history-category-select[data-row-id="${rowId}"]`);
+      if (!select || !select.value) return;
+      await applyHistoryCategory(expenseId, Number(select.value), e.currentTarget);
+    });
+  });
+}
+
+async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
+  buttonEl.disabled = true;
+  try {
+    const res = await fetch(`/api/expenses/${expenseId}/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoryId }),
+    }).then((r) => r.json());
+
+    if (res.error) {
+      showAlert('history-alert', `Error: ${res.error}`, 'error');
+      return;
+    }
+
+    showAlert('history-alert', `✔ Category "${res.categoryName}" applied to expense.`, 'success');
+    await loadHistory();
+  } catch (err) {
+    showAlert('history-alert', `Request failed: ${err.message}`, 'error');
+  } finally {
+    buttonEl.disabled = false;
   }
 }
 

@@ -214,6 +214,8 @@ body {
 .apply-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .apply-row label { font-size: .875rem; font-weight: 500; white-space: nowrap; }
 .apply-row .form-control { margin-bottom: 0; }
+.history-action-row { display: flex; align-items: center; gap: .5rem; min-width: 260px; }
+.history-action-row .form-control { margin-bottom: 0; min-width: 180px; }
 
 .empty-state { color: var(--text-muted); padding: 2rem 0; text-align: center; }
 
