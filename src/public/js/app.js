@@ -315,7 +315,7 @@ async function loadHistory() {
 
 function historyActionCell(row, categories) {
   if (!row.expense_id || categories.length === 0) return '—';
-  const selectId = `history-category-select-${row.id}`;
+  const selectId = `history-category-select-${row.expense_id}`;
   const options = categories
     .map((c) => `<option value="${esc(c.id)}" ${c.id === row.category_id ? 'selected' : ''}>[${esc(c.grouping)}] ${esc(c.name)}</option>`)
     .join('');
