@@ -345,7 +345,7 @@ function escapeSelectorValue(value) {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(str);
   }
-  return str.replace(/["\\\]]/g, '\\$&');
+  return str.replace(/["\\]/g, '\\$&');
 }
 
 async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
