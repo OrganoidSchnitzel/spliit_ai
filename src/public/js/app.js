@@ -316,14 +316,14 @@ async function loadHistory() {
 function historyActionCell(row, categories) {
   if (!row.expense_id || categories.length === 0) return '—';
   const options = categories
-    .map((c) => `<option value="${c.id}" ${c.id === row.category_id ? 'selected' : ''}>[${esc(c.grouping)}] ${esc(c.name)}</option>`)
+    .map((c) => `<option value="${esc(c.id)}" ${c.id === row.category_id ? 'selected' : ''}>[${esc(c.grouping)}] ${esc(c.name)}</option>`)
     .join('');
   return `
     <div class="history-action-row">
-      <select class="form-control history-category-select" data-row-id="${row.id}">
+      <select class="form-control history-category-select" data-row-id="${esc(row.id)}">
         ${options}
       </select>
-      <button class="btn btn-sm btn-success history-apply-btn" data-expense-id="${esc(row.expense_id)}" data-row-id="${row.id}">Apply</button>
+      <button class="btn btn-sm btn-success history-apply-btn" data-expense-id="${esc(row.expense_id)}" data-row-id="${esc(row.id)}">Apply</button>
     </div>
   `;
 }
