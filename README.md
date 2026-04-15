@@ -9,7 +9,7 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 - **Automatic categorization** – a scheduled job periodically scans uncategorized expenses and assigns the most likely category using a local Ollama model.
 - **Confidence threshold** – suggestions below the configured threshold are not applied automatically, preventing low-quality assignments.
 - **Customizable prompt template** – edit the LLM prompt directly in the UI to tune accuracy and performance.
-- **Word list management** – add/remove keywords for fast category matching via the Settings UI.
+- **Word list management** – add/remove keywords for fast category matching via the Settings UI, with manual additions persisted in the data volume.
 - **Playground** – manually test AI suggestions on any expense before committing changes to the database.
 - **Dashboard** – see the health of all connected services and the list of uncategorized expenses at a glance.
 - **Processing history** – every categorization attempt is logged to a local SQLite database so you can audit what was applied.
@@ -195,6 +195,7 @@ Tests use [Jest](https://jestjs.io/) with all external services mocked (no live 
 4. **ollamaService** (if no word list match) builds an optimized prompt containing the expense details and available categories, then calls the Ollama `/api/generate` endpoint with `format: "json"` to force structured output.
 5. The response is parsed and validated. If `confidence ≥ CONFIDENCE_THRESHOLD`, the category is written to the database immediately. Otherwise, it is left for manual review via the Playground.
 6. Every attempt (applied, low confidence, or error) is recorded in the **processing history** (SQLite, `data/history.db`).
+7. Manually added word-list keywords are persisted in `data/manual-keywords.json` so they survive container updates when `/app/data` is mounted.
 
 **Performance**: With word lists enabled, 60-80% of common German expenses are categorized instantly without LLM calls, resulting in 2-3x faster processing.
 
