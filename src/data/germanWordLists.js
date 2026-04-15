@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 /**
  * German word lists for fast category matching without LLM calls.
  * These lists contain common German merchant names and keywords that can be matched instantly.
@@ -536,6 +539,117 @@ const wordLists = {
   },
 };
 
+const DATA_DIR = path.join(process.cwd(), 'data');
+const MANUAL_KEYWORDS_PATH = path.join(DATA_DIR, 'manual-keywords.json');
+const MAX_MANUAL_KEYWORDS_FILE_BYTES = 1024 * 1024; // 1 MB
+const manualKeywords = {};
+
+function normalizeKeyword(keyword) {
+  return String(keyword).toLowerCase().trim();
+}
+
+function ensureDataDir() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function persistManualKeywords() {
+  ensureDataDir();
+  const tmpPath = `${MANUAL_KEYWORDS_PATH}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(manualKeywords, null, 2));
+  } catch (err) {
+    throw new Error(`Failed to write manual keywords temp file ${tmpPath}: ${err.message}`);
+  }
+
+  try {
+    fs.renameSync(tmpPath, MANUAL_KEYWORDS_PATH);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (_cleanupErr) {
+      // Best-effort cleanup only.
+    }
+    throw new Error(`Failed to persist manual keywords to ${MANUAL_KEYWORDS_PATH}: ${err.message}`);
+  }
+}
+
+function loadPersistedManualKeywords() {
+  if (!fs.existsSync(MANUAL_KEYWORDS_PATH)) {
+    return;
+  }
+
+  const stats = fs.statSync(MANUAL_KEYWORDS_PATH);
+  if (stats.size > MAX_MANUAL_KEYWORDS_FILE_BYTES) {
+    console.warn(
+      `[WordLists] Skipping manual keywords load from ${MANUAL_KEYWORDS_PATH}: file too large (${stats.size} bytes)`
+    );
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(MANUAL_KEYWORDS_PATH, 'utf8'));
+  } catch (err) {
+    console.warn(`[WordLists] Failed to load persisted manual keywords from ${MANUAL_KEYWORDS_PATH}: ${err.message}`);
+    return;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return;
+  }
+
+  for (const [listName, keywords] of Object.entries(parsed)) {
+    if (!wordLists[listName] || !Array.isArray(keywords)) {
+      continue;
+    }
+    for (const rawKeyword of keywords) {
+      const normalized = normalizeKeyword(rawKeyword);
+      if (!normalized) {
+        continue;
+      }
+      if (!wordLists[listName].keywords.includes(normalized)) {
+        wordLists[listName].keywords.push(normalized);
+      }
+      if (!manualKeywords[listName]) {
+        manualKeywords[listName] = [];
+      }
+      if (!manualKeywords[listName].includes(normalized)) {
+        manualKeywords[listName].push(normalized);
+      }
+    }
+  }
+}
+
+function trackManualKeyword(listName, keyword) {
+  if (!manualKeywords[listName]) {
+    manualKeywords[listName] = [];
+  }
+  if (!manualKeywords[listName].includes(keyword)) {
+    manualKeywords[listName].push(keyword);
+    persistManualKeywords();
+  }
+}
+
+function untrackManualKeyword(listName, keyword) {
+  const list = manualKeywords[listName];
+  if (!list) {
+    return;
+  }
+
+  const idx = list.indexOf(keyword);
+  if (idx < 0) {
+    return;
+  }
+
+  list.splice(idx, 1);
+  if (list.length === 0) {
+    delete manualKeywords[listName];
+  }
+  persistManualKeywords();
+}
+
+loadPersistedManualKeywords();
+
 /**
  * Match an expense title against all word lists.
  * Returns the first matching category with high confidence (0.95) if found.
@@ -593,12 +707,18 @@ function addKeyword(listName, keyword) {
     return false;
   }
 
-  const normalized = keyword.toLowerCase().trim();
+  const normalized = normalizeKeyword(keyword);
   if (!normalized || wordLists[listName].keywords.includes(normalized)) {
     return false;
   }
 
   wordLists[listName].keywords.push(normalized);
+  try {
+    trackManualKeyword(listName, normalized);
+  } catch (err) {
+    wordLists[listName].keywords.pop();
+    throw err;
+  }
   return true;
 }
 
@@ -613,13 +733,22 @@ function removeKeyword(listName, keyword) {
     return false;
   }
 
-  const normalized = keyword.toLowerCase().trim();
+  const normalized = normalizeKeyword(keyword);
   const idx = wordLists[listName].keywords.indexOf(normalized);
   if (idx < 0) {
     return false;
   }
 
   wordLists[listName].keywords.splice(idx, 1);
+  const wasManual = manualKeywords[listName] && manualKeywords[listName].includes(normalized);
+  if (wasManual) {
+    try {
+      untrackManualKeyword(listName, normalized);
+    } catch (err) {
+      wordLists[listName].keywords.splice(idx, 0, normalized);
+      throw err;
+    }
+  }
   return true;
 }
 
