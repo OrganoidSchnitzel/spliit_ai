@@ -315,15 +315,16 @@ async function loadHistory() {
 
 function historyActionCell(row, categories) {
   if (!row.expense_id || categories.length === 0) return '—';
+  const selectId = `history-category-select-${row.id}`;
   const options = categories
     .map((c) => `<option value="${esc(c.id)}" ${c.id === row.category_id ? 'selected' : ''}>[${esc(c.grouping)}] ${esc(c.name)}</option>`)
     .join('');
   return `
     <div class="history-action-row">
-      <select class="form-control history-category-select" data-row-id="${esc(row.id)}">
+      <select id="${esc(selectId)}" class="form-control history-category-select">
         ${options}
       </select>
-      <button class="btn btn-sm btn-success history-apply-btn" data-expense-id="${esc(row.expense_id)}" data-row-id="${esc(row.id)}">Apply</button>
+      <button class="btn btn-sm btn-success history-apply-btn" data-expense-id="${esc(row.expense_id)}" data-select-id="${esc(selectId)}">Apply</button>
     </div>
   `;
 }
@@ -332,24 +333,17 @@ function bindHistoryActions() {
   document.querySelectorAll('.history-apply-btn').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       const expenseId = e.currentTarget.getAttribute('data-expense-id');
-      const rowId = e.currentTarget.getAttribute('data-row-id');
-      const select = document.querySelector(`.history-category-select[data-row-id="${escapeSelectorValue(rowId)}"]`);
+      const selectId = e.currentTarget.getAttribute('data-select-id');
+      const select = document.getElementById(selectId);
       if (!select || !select.value) return;
       await applyHistoryCategory(expenseId, Number(select.value), e.currentTarget);
     });
   });
 }
 
-function escapeSelectorValue(value) {
-  const str = String(value);
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(str);
-  }
-  return str.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch.codePointAt(0).toString(16)} `);
-}
-
 async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
   buttonEl.disabled = true;
+  let shouldResetButton = true;
   try {
     const res = await fetch(`/api/expenses/${expenseId}/apply`, {
       method: 'POST',
@@ -363,11 +357,12 @@ async function applyHistoryCategory(expenseId, categoryId, buttonEl) {
     }
 
     showAlert('history-alert', `✔ Category "${res.categoryName}" applied to expense.`, 'success');
+    shouldResetButton = false;
     await loadHistory();
   } catch (err) {
     showAlert('history-alert', `Request failed: ${err.message}`, 'error');
   } finally {
-    if (buttonEl && buttonEl.isConnected) {
+    if (shouldResetButton) {
       buttonEl.disabled = false;
     }
   }
