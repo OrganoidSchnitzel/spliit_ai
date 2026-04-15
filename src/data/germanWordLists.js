@@ -541,6 +541,7 @@ const wordLists = {
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const MANUAL_KEYWORDS_PATH = path.join(DATA_DIR, 'manual-keywords.json');
+const MAX_MANUAL_KEYWORDS_FILE_BYTES = 1024 * 1024; // 1 MB
 const manualKeywords = {};
 
 function normalizeKeyword(keyword) {
@@ -548,9 +549,7 @@ function normalizeKeyword(keyword) {
 }
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 function persistManualKeywords() {
@@ -558,14 +557,32 @@ function persistManualKeywords() {
   const tmpPath = `${MANUAL_KEYWORDS_PATH}.tmp`;
   try {
     fs.writeFileSync(tmpPath, JSON.stringify(manualKeywords, null, 2));
+  } catch (err) {
+    throw new Error(`Failed to write manual keywords temp file ${tmpPath}: ${err.message}`);
+  }
+
+  try {
     fs.renameSync(tmpPath, MANUAL_KEYWORDS_PATH);
   } catch (err) {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (_cleanupErr) {
+      // Best-effort cleanup only.
+    }
     throw new Error(`Failed to persist manual keywords to ${MANUAL_KEYWORDS_PATH}: ${err.message}`);
   }
 }
 
 function loadPersistedManualKeywords() {
   if (!fs.existsSync(MANUAL_KEYWORDS_PATH)) {
+    return;
+  }
+
+  const stats = fs.statSync(MANUAL_KEYWORDS_PATH);
+  if (stats.size > MAX_MANUAL_KEYWORDS_FILE_BYTES) {
+    console.warn(
+      `[WordLists] Skipping manual keywords load from ${MANUAL_KEYWORDS_PATH}: file too large (${stats.size} bytes)`
+    );
     return;
   }
 
