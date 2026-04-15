@@ -556,8 +556,12 @@ function ensureDataDir() {
 function persistManualKeywords() {
   ensureDataDir();
   const tmpPath = `${MANUAL_KEYWORDS_PATH}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(manualKeywords, null, 2));
-  fs.renameSync(tmpPath, MANUAL_KEYWORDS_PATH);
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(manualKeywords, null, 2));
+    fs.renameSync(tmpPath, MANUAL_KEYWORDS_PATH);
+  } catch (err) {
+    throw new Error(`Failed to persist manual keywords to ${MANUAL_KEYWORDS_PATH}: ${err.message}`);
+  }
 }
 
 function loadPersistedManualKeywords() {
@@ -569,7 +573,7 @@ function loadPersistedManualKeywords() {
   try {
     parsed = JSON.parse(fs.readFileSync(MANUAL_KEYWORDS_PATH, 'utf8'));
   } catch (err) {
-    console.warn(`[WordLists] Failed to load persisted manual keywords: ${err.message}`);
+    console.warn(`[WordLists] Failed to load persisted manual keywords from ${MANUAL_KEYWORDS_PATH}: ${err.message}`);
     return;
   }
 
