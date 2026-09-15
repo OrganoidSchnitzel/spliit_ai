@@ -63,8 +63,27 @@ function parseUrl(name, raw, fallback) {
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
 
+/**
+ * Read an environment variable, treating an empty string as "not set".
+ *
+ * Docker UIs — Unraid's template editor in particular — pass unset optional
+ * fields as empty strings rather than omitting them. `??` alone does not catch
+ * that, so `PORT=""` used to reach the number parser and abort startup with
+ * "not a number" for a variable the user never filled in.
+ */
+function read(env, name) {
+  const raw = env[name];
+  if (raw === undefined || raw === null) return undefined;
+  const trimmed = String(raw).trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 function build(env) {
   const errors = [];
+  const get = (name, fallback) => {
+    const value = read(env, name);
+    return value === undefined ? fallback : value;
+  };
   const attempt = (fn, fallback) => {
     try {
       return fn();
@@ -79,16 +98,16 @@ function build(env) {
 
   const cfg = {
     port: attempt(
-      () => parseNumber('PORT', env.PORT ?? '3000', { min: 1, max: 65535, integer: true }),
+      () => parseNumber('PORT', get('PORT', '3000'), { min: 1, max: 65535, integer: true }),
       3000
     ),
 
     // Optional shared secret. When set, every /api request must send it as
     // `X-Api-Token` or `Authorization: Bearer <token>`.
-    apiToken: (env.API_TOKEN || '').trim() || null,
+    apiToken: read(env, 'API_TOKEN') || null,
 
     logLevel: (() => {
-      const raw = (env.LOG_LEVEL || 'info').trim().toLowerCase();
+      const raw = get('LOG_LEVEL', 'info').toLowerCase();
       if (!LOG_LEVELS.includes(raw)) {
         errors.push(`LOG_LEVEL: "${raw}" is not one of ${LOG_LEVELS.join(', ')}`);
         return 'info';
@@ -98,27 +117,27 @@ function build(env) {
 
     // PostgreSQL (Spliit database)
     database: {
-      host: env.DB_HOST || 'localhost',
+      host: get('DB_HOST', 'localhost'),
       port: attempt(
-        () => parseNumber('DB_PORT', env.DB_PORT ?? '5432', { min: 1, max: 65535, integer: true }),
+        () => parseNumber('DB_PORT', get('DB_PORT', '5432'), { min: 1, max: 65535, integer: true }),
         5432
       ),
-      name: env.DB_NAME || 'spliit',
-      user: env.DB_USER || 'postgres',
+      name: get('DB_NAME', 'spliit'),
+      user: get('DB_USER', 'postgres'),
       password: env.DB_PASSWORD || '',
-      ssl: attempt(() => parseBoolean('DB_SSL', env.DB_SSL, false), false),
+      ssl: attempt(() => parseBoolean('DB_SSL', read(env, 'DB_SSL'), false), false),
     },
 
     // Ollama (local LLM)
     ollama: {
       baseUrl: attempt(
-        () => parseUrl('OLLAMA_BASE_URL', env.OLLAMA_BASE_URL, 'http://localhost:11434'),
+        () => parseUrl('OLLAMA_BASE_URL', get('OLLAMA_BASE_URL', 'http://localhost:11434'), 'http://localhost:11434'),
         'http://localhost:11434'
       ),
-      model: (env.OLLAMA_MODEL || 'llama3.2').trim(),
+      model: get('OLLAMA_MODEL', 'llama3.2'),
       timeoutMs: attempt(
         () =>
-          parseNumber('OLLAMA_TIMEOUT_MS', env.OLLAMA_TIMEOUT_MS ?? '60000', {
+          parseNumber('OLLAMA_TIMEOUT_MS', get('OLLAMA_TIMEOUT_MS', '60000'), {
             min: 1000,
             max: 600000,
             integer: true,
@@ -128,14 +147,14 @@ function build(env) {
       // How long Ollama keeps the model resident after a request. The default
       // (5m) is shorter than the default scheduler interval (15m), which means
       // the model is evicted and re-read from disk before every batch.
-      keepAlive: (env.OLLAMA_KEEP_ALIVE || '30m').trim(),
+      keepAlive: get('OLLAMA_KEEP_ALIVE', '30m'),
       temperature: attempt(
-        () => parseNumber('OLLAMA_TEMPERATURE', env.OLLAMA_TEMPERATURE ?? '0', { min: 0, max: 2 }),
+        () => parseNumber('OLLAMA_TEMPERATURE', get('OLLAMA_TEMPERATURE', '0'), { min: 0, max: 2 }),
         0
       ),
       numPredict: attempt(
         () =>
-          parseNumber('OLLAMA_NUM_PREDICT', env.OLLAMA_NUM_PREDICT ?? '256', {
+          parseNumber('OLLAMA_NUM_PREDICT', get('OLLAMA_NUM_PREDICT', '256'), {
             min: 32,
             max: 4096,
             integer: true,
@@ -144,7 +163,7 @@ function build(env) {
       ),
       numCtx: attempt(
         () =>
-          parseNumber('OLLAMA_NUM_CTX', env.OLLAMA_NUM_CTX ?? '2048', {
+          parseNumber('OLLAMA_NUM_CTX', get('OLLAMA_NUM_CTX', '2048'), {
             min: 512,
             max: 32768,
             integer: true,
@@ -154,7 +173,7 @@ function build(env) {
       // Retries for transient failures (connection reset, 5xx, timeout).
       maxRetries: attempt(
         () =>
-          parseNumber('OLLAMA_MAX_RETRIES', env.OLLAMA_MAX_RETRIES ?? '2', {
+          parseNumber('OLLAMA_MAX_RETRIES', get('OLLAMA_MAX_RETRIES', '2'), {
             min: 0,
             max: 5,
             integer: true,
@@ -164,47 +183,47 @@ function build(env) {
       // Ask Ollama to constrain decoding to the response schema instead of
       // generic JSON mode. Disable for Ollama < 0.5.
       useStructuredOutput: attempt(
-        () => parseBoolean('OLLAMA_STRUCTURED_OUTPUT', env.OLLAMA_STRUCTURED_OUTPUT, true),
+        () => parseBoolean('OLLAMA_STRUCTURED_OUTPUT', read(env, 'OLLAMA_STRUCTURED_OUTPUT'), true),
         true
       ),
-      customPromptTemplate: env.OLLAMA_CUSTOM_PROMPT || null,
+      customPromptTemplate: read(env, 'OLLAMA_CUSTOM_PROMPT') || null,
     },
 
     // Minimum confidence (0–1) to auto-apply a suggested category.
     confidenceThreshold: attempt(
       () =>
-        parseNumber('CONFIDENCE_THRESHOLD', env.CONFIDENCE_THRESHOLD ?? '0.6', { min: 0, max: 1 }),
+        parseNumber('CONFIDENCE_THRESHOLD', get('CONFIDENCE_THRESHOLD', '0.6'), { min: 0, max: 1 }),
       0.6
     ),
 
     // Dry run: suggest and record, but never write to the Spliit database.
-    dryRun: attempt(() => parseBoolean('DRY_RUN', env.DRY_RUN, false), false),
+    dryRun: attempt(() => parseBoolean('DRY_RUN', read(env, 'DRY_RUN'), false), false),
 
     // Use the deterministic word lists before falling back to the LLM.
     wordListsEnabled: attempt(
-      () => parseBoolean('WORDLISTS_ENABLED', env.WORDLISTS_ENABLED, true),
+      () => parseBoolean('WORDLISTS_ENABLED', read(env, 'WORDLISTS_ENABLED'), true),
       true
     ),
 
     scheduler: {
       enabled: attempt(
-        () => parseBoolean('SCHEDULER_ENABLED', env.SCHEDULER_ENABLED, true),
+        () => parseBoolean('SCHEDULER_ENABLED', read(env, 'SCHEDULER_ENABLED'), true),
         true
       ),
-      cronExpression: (env.SCHEDULER_CRON || '*/15 * * * *').trim(),
+      cronExpression: get('SCHEDULER_CRON', '*/15 * * * *'),
     },
 
     processing: {
       batchSize: attempt(
         () =>
-          parseNumber('BATCH_SIZE', env.BATCH_SIZE ?? '10', { min: 1, max: 500, integer: true }),
+          parseNumber('BATCH_SIZE', get('BATCH_SIZE', '10'), { min: 1, max: 500, integer: true }),
         10
       ),
       // Escalating wait before re-attempting an expense that did not reach the
       // confidence threshold, in hours. After the last step the expense is
       // "parked" and only retried on explicit request.
       retryBackoffHours: (() => {
-        const raw = (env.RETRY_BACKOFF_HOURS || '1,6,24').trim();
+        const raw = get('RETRY_BACKOFF_HOURS', '1,6,24');
         const parts = raw
           .split(',')
           .map((p) => p.trim())
@@ -225,7 +244,7 @@ function build(env) {
     history: {
       retentionDays: attempt(
         () =>
-          parseNumber('HISTORY_RETENTION_DAYS', env.HISTORY_RETENTION_DAYS ?? '90', {
+          parseNumber('HISTORY_RETENTION_DAYS', get('HISTORY_RETENTION_DAYS', '90'), {
             min: 1,
             max: 3650,
             integer: true,
@@ -255,5 +274,6 @@ config.build = build;
 config.ConfigError = ConfigError;
 config.parseNumber = parseNumber;
 config.parseBoolean = parseBoolean;
+config.readEnv = read;
 
 module.exports = config;

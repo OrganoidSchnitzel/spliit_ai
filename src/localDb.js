@@ -21,6 +21,7 @@ const DB_PATH = path.join(DATA_DIR, 'app.db');
 const LEGACY_DB_PATH = path.join(DATA_DIR, 'history.db');
 
 let db = null;
+let activePath = DB_PATH;
 
 function dataDir() {
   return DATA_DIR;
@@ -37,8 +38,9 @@ function ensureDataDir() {
   } catch (err) {
     throw new Error(
       `Cannot write to the data directory ${DATA_DIR}: ${err.message}. ` +
-        'When running in Docker, make sure the mounted volume is writable by the ' +
-        'container user (e.g. `chown -R 1000:1000 /path/to/data`).'
+        'When running in Docker, the container must be able to write the mounted ' +
+        'volume. Set PUID/PGID to the owner of that directory (on Unraid the ' +
+        'default 99:100 is usually right), or chown it to match.'
     );
   }
 }
@@ -52,11 +54,23 @@ function init() {
   ensureDataDir();
 
   // Earlier versions wrote to history.db. Adopt it so upgrades keep their log.
+  // A failure here must not stop the app: renaming needs write permission on
+  // the directory, and an upgrade should never be the thing that refuses to
+  // boot. Fall back to using the file where it already is.
+  activePath = DB_PATH;
   if (!fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_DB_PATH)) {
-    fs.renameSync(LEGACY_DB_PATH, DB_PATH);
+    try {
+      fs.renameSync(LEGACY_DB_PATH, DB_PATH);
+    } catch (err) {
+      console.warn(
+        `[DB] Could not rename ${LEGACY_DB_PATH} to ${DB_PATH} (${err.message}); ` +
+          'continuing with the existing file.'
+      );
+      activePath = LEGACY_DB_PATH;
+    }
   }
 
-  db = new Database(DB_PATH);
+  db = new Database(activePath);
   // WAL keeps readers from blocking the scheduler's writes; better-sqlite3 is
   // synchronous, so anything that shortens a write matters on slow storage.
   db.pragma('journal_mode = WAL');
@@ -80,4 +94,4 @@ function close() {
   }
 }
 
-module.exports = { init, get, close, dataDir, DB_PATH };
+module.exports = { init, get, close, dataDir, DB_PATH, dbPath: () => activePath };

@@ -108,3 +108,29 @@ with its bugs fixed:
   so Apply on an error row silently assigned it. There is now a `— pick a category —`
   placeholder and an explicit guard.
 - The correction is now recorded in the history log rather than discarded.
+
+## 1.1.1
+
+Fixes two ways 1.1.0 stopped an existing container from starting, with no
+configuration change on the user's side. Both were regressions introduced by
+1.1.0 itself.
+
+- **An empty environment variable no longer aborts startup.** 1.1.0 added config
+  validation, but Docker UIs — Unraid's template editor in particular — pass
+  unset optional fields as empty strings rather than omitting them. `PORT=""`
+  therefore reached the number parser and failed with `"" is not a number` for a
+  field the user had never filled in. Empty and whitespace-only values are now
+  treated as unset and fall back to their defaults; genuinely wrong values are
+  still rejected.
+- **The container no longer pins a uid.** 1.1.0 switched the runtime user from
+  an auto-assigned system uid to `node` (uid 1000). Any bind-mounted data
+  directory whose ownership matched the old uid became unwritable, and the app
+  exits when it cannot write there. The image now starts as root, makes
+  `/app/data` writable by `PUID:PGID` (default `99:100`, Unraid's
+  `nobody:users`), then drops to that user — so the running process is still
+  unprivileged, but the container works against whatever owns the host
+  directory. Set `PUID`/`PGID` if yours differ.
+- **Upgrading can no longer fail on the database rename.** Adopting a pre-1.1
+  `history.db` as `app.db` needs write permission on the directory; if that
+  fails the app now logs a warning and keeps using the existing file instead of
+  refusing to boot.

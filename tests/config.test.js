@@ -57,3 +57,47 @@ describe('config validation', () => {
     expect(build({}).ollama.keepAlive).toBe('30m');
   });
 });
+
+describe('empty environment variables', () => {
+  // Docker UIs — Unraid's template editor especially — pass unset optional
+  // fields as empty strings rather than omitting them. Treating those as a
+  // validation error stopped containers from starting after an upgrade, with
+  // no configuration change on the user's side.
+  const NUMERIC = [
+    'PORT', 'DB_PORT', 'CONFIDENCE_THRESHOLD', 'BATCH_SIZE', 'OLLAMA_TIMEOUT_MS',
+    'OLLAMA_TEMPERATURE', 'OLLAMA_NUM_PREDICT', 'OLLAMA_NUM_CTX',
+    'OLLAMA_MAX_RETRIES', 'HISTORY_RETENTION_DAYS',
+  ];
+
+  it.each(NUMERIC)('treats %s="" as unset', (name) => {
+    expect(() => build({ [name]: '' })).not.toThrow();
+  });
+
+  it('treats an empty OLLAMA_BASE_URL as unset', () => {
+    expect(build({ OLLAMA_BASE_URL: '' }).ollama.baseUrl).toBe('http://localhost:11434');
+  });
+
+  it('treats whitespace-only values as unset', () => {
+    expect(build({ PORT: '   ', CONFIDENCE_THRESHOLD: ' ' }).port).toBe(3000);
+  });
+
+  it('starts with every optional variable empty at once', () => {
+    const env = Object.fromEntries(
+      [...NUMERIC, 'OLLAMA_BASE_URL', 'OLLAMA_MODEL', 'SCHEDULER_CRON', 'DB_HOST',
+       'LOG_LEVEL', 'DRY_RUN', 'SCHEDULER_ENABLED', 'API_TOKEN', 'OLLAMA_KEEP_ALIVE',
+       'RETRY_BACKOFF_HOURS', 'DB_SSL', 'WORDLISTS_ENABLED'].map((k) => [k, ''])
+    );
+    const cfg = build(env);
+    expect(cfg.port).toBe(3000);
+    expect(cfg.confidenceThreshold).toBe(0.6);
+    expect(cfg.ollama.model).toBe('llama3.2');
+    expect(cfg.apiToken).toBeNull();
+    expect(cfg.scheduler.cronExpression).toBe('*/15 * * * *');
+  });
+
+  it('still rejects a value that is genuinely wrong', () => {
+    // The point is to ignore blanks, not to stop validating.
+    expect(() => build({ BATCH_SIZE: 'ten' })).toThrow(/BATCH_SIZE/);
+    expect(() => build({ CONFIDENCE_THRESHOLD: '9' })).toThrow(/out of range/);
+  });
+});

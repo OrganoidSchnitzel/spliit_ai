@@ -57,6 +57,13 @@ services:
 
       PORT: 3000
 
+      # ── Ownership of the mounted data volume ─────────────────────────────
+      # The container starts as root, makes /app/data writable by these ids,
+      # then drops to them. Defaults are Unraid's nobody:users. Set them to the
+      # owner of your host directory if it differs (`id -u` / `id -g`).
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+
     networks:
       - spliit-network
     volumes:
