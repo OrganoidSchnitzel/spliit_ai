@@ -3,64 +3,99 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>Spliit AI – Expense Categorizer</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <nav class="navbar">
     <div class="navbar-brand">
-      <span class="brand-icon">🤖</span>
+      <span class="brand-icon" aria-hidden="true">🤖</span>
       <span class="brand-name">Spliit AI</span>
     </div>
-    <div class="navbar-links">
-      <a href="/" class="nav-link active" id="nav-dashboard">Dashboard</a>
-      <a href="/playground" class="nav-link" id="nav-playground">Playground</a>
-      <a href="/history" class="nav-link" id="nav-history">History</a>
-      <a href="/settings" class="nav-link" id="nav-settings">Settings</a>
+
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span aria-hidden="true">☰</span>
+    </button>
+
+    <div class="navbar-links" id="navbar-links">
+      <a href="/" class="nav-link active">Dashboard</a>
+      <a href="/playground" class="nav-link">Playground</a>
+      <a href="/history" class="nav-link">History</a>
+      <a href="/settings" class="nav-link">Settings</a>
     </div>
-    <div class="app-version" id="app-version">v…</div>
+
+    <div class="navbar-meta">
+      <button class="icon-btn" id="theme-toggle" aria-label="Switch colour theme" title="Switch colour theme">
+        <span id="theme-icon" aria-hidden="true">🌗</span>
+      </button>
+      <span class="app-version" id="app-version">v…</span>
+    </div>
   </nav>
 
-  <main class="main-content">
+  <div class="banner banner-warn hidden" id="dryrun-banner" role="status">
+    <strong>Dry run is on.</strong> Suggestions are logged but nothing is written to Spliit.
+    <a href="/settings" class="banner-link nav-link">Change in settings</a>
+  </div>
+
+  <main class="main-content" id="main">
     <!-- ─── Dashboard ─────────────────────────────────── -->
     <section id="page-dashboard">
-      <h1 class="page-title">Dashboard</h1>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Health of the categorizer and what is still waiting.</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost" id="btn-refresh-dashboard" title="Refresh">↻ Refresh</button>
+          <button class="btn btn-primary" id="btn-run-batch">▶ Run categorization</button>
+        </div>
+      </div>
 
       <div class="status-grid">
-        <div class="status-card" id="card-db">
+        <div class="status-card">
           <div class="status-label">Database</div>
           <div class="status-value" id="status-db">…</div>
+          <div class="status-note" id="status-db-note"></div>
         </div>
-        <div class="status-card" id="card-ollama">
+        <div class="status-card">
           <div class="status-label">Ollama</div>
           <div class="status-value" id="status-ollama">…</div>
+          <div class="status-note" id="status-ollama-note"></div>
         </div>
-        <div class="status-card" id="card-scheduler">
+        <div class="status-card">
           <div class="status-label">Scheduler</div>
           <div class="status-value" id="status-scheduler">…</div>
+          <div class="status-note" id="status-scheduler-note"></div>
         </div>
         <div class="status-card">
           <div class="status-label">Uncategorized</div>
           <div class="status-value" id="status-uncategorized">…</div>
+          <div class="status-note" id="status-uncategorized-note"></div>
         </div>
       </div>
 
-      <div class="section-header">
-        <h2>Uncategorized Expenses</h2>
-        <button class="btn btn-primary" id="btn-run-batch">▶ Run Categorization</button>
+      <div class="card" id="last-run-card" hidden>
+        <h2>Last run</h2>
+        <div class="stat-row" id="last-run-stats"></div>
       </div>
 
-      <div id="batch-result" class="alert hidden"></div>
+      <div class="section-header">
+        <h2>Uncategorized expenses</h2>
+        <span class="muted" id="uncategorized-caption"></span>
+      </div>
 
       <div class="table-wrapper">
-        <table class="expense-table" id="uncategorized-table">
+        <table class="expense-table">
           <thead>
             <tr>
               <th>Date</th>
               <th>Group</th>
               <th>Title</th>
-              <th>Amount</th>
-              <th>Actions</th>
+              <th class="num">Amount</th>
+              <th class="col-action">Set category</th>
             </tr>
           </thead>
           <tbody id="uncategorized-tbody">
@@ -72,80 +107,160 @@
 
     <!-- ─── Playground ────────────────────────────────── -->
     <section id="page-playground" class="hidden">
-      <h1 class="page-title">Playground</h1>
-      <p class="page-subtitle">Test AI categorization on any expense before committing changes to the database.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Playground</h1>
+          <p class="page-subtitle">Try categorization on a real or made-up expense without touching the database.</p>
+        </div>
+      </div>
 
       <div class="playground-grid">
         <div class="card">
-          <h2>Select Expense</h2>
-          <label for="pg-expense-select">Uncategorized expense</label>
-          <select id="pg-expense-select" class="form-control">
-            <option value="">— pick an expense —</option>
-          </select>
+          <div class="tabs" role="tablist">
+            <button class="tab active" id="tab-existing" role="tab" aria-selected="true">Existing expense</button>
+            <button class="tab" id="tab-adhoc" role="tab" aria-selected="false">Made-up expense</button>
+          </div>
 
-          <button class="btn btn-secondary" id="btn-pg-suggest" disabled>
-            🔮 Get AI Suggestion
-          </button>
+          <div id="pg-pane-existing">
+            <label for="pg-expense-select">Uncategorized expense</label>
+            <select id="pg-expense-select" class="form-control">
+              <option value="">— pick an expense —</option>
+            </select>
+          </div>
+
+          <div id="pg-pane-adhoc" class="hidden">
+            <label for="pg-title">Title</label>
+            <input type="text" id="pg-title" class="form-control" placeholder="e.g. Rewe Wocheneinkauf" />
+            <div class="field-row">
+              <div>
+                <label for="pg-amount">Amount (cents)</label>
+                <input type="number" id="pg-amount" class="form-control" value="4250" min="0" />
+              </div>
+              <div>
+                <label for="pg-currency">Currency</label>
+                <input type="text" id="pg-currency" class="form-control" value="EUR" maxlength="8" />
+              </div>
+            </div>
+            <label for="pg-notes">Notes (optional)</label>
+            <input type="text" id="pg-notes" class="form-control" placeholder="" />
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="pg-skip-wordlists" />
+            <span>Skip word lists (force the LLM)</span>
+          </label>
+
+          <button class="btn btn-primary block" id="btn-pg-suggest" disabled>🔮 Get suggestion</button>
         </div>
 
-        <div class="card" id="pg-result-card">
-          <h2>AI Suggestion</h2>
+        <div class="card">
+          <h2>Suggestion</h2>
           <div id="pg-result-empty" class="empty-state">Run a suggestion to see results here.</div>
+
           <div id="pg-result-content" class="hidden">
             <table class="detail-table">
               <tr><th>Expense</th><td id="pg-expense-title">—</td></tr>
               <tr><th>Amount</th><td id="pg-expense-amount">—</td></tr>
-              <tr><th>Suggested Category</th><td id="pg-cat-name">—</td></tr>
+              <tr><th>Category</th><td id="pg-cat-name">—</td></tr>
               <tr><th>Confidence</th><td id="pg-confidence">—</td></tr>
+              <tr><th>Decided by</th><td id="pg-source">—</td></tr>
+              <tr><th>Took</th><td id="pg-duration">—</td></tr>
               <tr><th>Reasoning</th><td id="pg-reasoning">—</td></tr>
             </table>
 
-            <div class="apply-row">
-              <label for="pg-cat-override">Apply category:</label>
+            <details class="explain" id="pg-wordlist-details">
+              <summary>Word-list analysis</summary>
+              <div id="pg-wordlist-body"></div>
+            </details>
+
+            <div class="apply-row" id="pg-apply-row">
+              <label for="pg-cat-override">Apply category</label>
               <select id="pg-cat-override" class="form-control"></select>
               <button class="btn btn-success" id="btn-pg-apply">✔ Apply</button>
             </div>
           </div>
         </div>
       </div>
-
-      <div id="pg-alert" class="alert hidden"></div>
     </section>
+
     <!-- ─── History ──────────────────────────────────── -->
     <section id="page-history" class="hidden">
-      <h1 class="page-title">Processing History</h1>
-      <p class="page-subtitle">A log of every categorization attempt made by Spliit AI.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Processing history</h1>
+          <p class="page-subtitle">Every categorization attempt, and a place to correct the ones that went wrong.</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost" id="btn-history-refresh">↻ Refresh</button>
+          <button class="btn btn-danger-ghost" id="btn-history-clear">Clear log</button>
+        </div>
+      </div>
 
-      <div class="status-grid" id="history-stats-grid">
+      <div class="status-grid">
         <div class="status-card">
-          <div class="status-label">Total Processed</div>
+          <div class="status-label">Total processed</div>
           <div class="status-value" id="hist-total">…</div>
         </div>
         <div class="status-card">
-          <div class="status-label">Auto-Applied</div>
+          <div class="status-label">Auto-applied</div>
           <div class="status-value ok" id="hist-applied">…</div>
+          <div class="status-note" id="hist-source-note"></div>
         </div>
         <div class="status-card">
-          <div class="status-label">Low Confidence</div>
+          <div class="status-label">Needs review</div>
           <div class="status-value warn" id="hist-low">…</div>
+          <div class="status-note" id="hist-parked-note"></div>
         </div>
         <div class="status-card">
           <div class="status-label">Errors</div>
           <div class="status-value error" id="hist-errors">…</div>
+          <div class="status-note" id="hist-speed-note"></div>
         </div>
       </div>
 
+      <div class="card" id="corrections-card" hidden>
+        <h2>Corrections you have made</h2>
+        <p class="section-desc">
+          Where you overrode a suggestion. Adding the merchant to a word list stops it recurring.
+        </p>
+        <div class="table-wrapper">
+          <table class="expense-table compact">
+            <thead>
+              <tr><th>Expense</th><th>Suggested</th><th>You chose</th><th>Source</th></tr>
+            </thead>
+            <tbody id="corrections-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="search" id="history-search" class="form-control" placeholder="Search title or group…" />
+        <select id="history-status" class="form-control">
+          <option value="all">All statuses</option>
+          <option value="applied">Applied</option>
+          <option value="low_confidence">Needs review</option>
+          <option value="manual">Manual</option>
+          <option value="dry_run">Dry run</option>
+          <option value="error">Error</option>
+        </select>
+        <select id="history-limit" class="form-control">
+          <option value="25">25 per page</option>
+          <option value="50" selected>50 per page</option>
+          <option value="100">100 per page</option>
+        </select>
+      </div>
+
       <div class="table-wrapper">
-        <table class="expense-table" id="history-table">
+        <table class="expense-table">
           <thead>
             <tr>
               <th>When</th>
               <th>Expense</th>
-              <th>Group</th>
               <th>Amount</th>
               <th>Category</th>
               <th>Confidence</th>
               <th>Status</th>
+              <th class="col-action">Correct to</th>
             </tr>
           </thead>
           <tbody id="history-tbody">
@@ -153,54 +268,112 @@
           </tbody>
         </table>
       </div>
+
+      <div class="pager">
+        <button class="btn btn-ghost" id="history-prev" disabled>← Previous</button>
+        <span class="muted" id="history-range">—</span>
+        <button class="btn btn-ghost" id="history-next" disabled>Next →</button>
+      </div>
     </section>
 
     <!-- ─── Settings ─────────────────────────────────── -->
     <section id="page-settings" class="hidden">
-      <h1 class="page-title">Settings</h1>
-      <p class="page-subtitle">Configure categorization behavior and word lists.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Settings</h1>
+          <p class="page-subtitle">
+            Changes are saved to the data volume and survive restarts. Environment variables supply the defaults.
+          </p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost" id="btn-settings-reset-all">Reset all to defaults</button>
+        </div>
+      </div>
 
-      <div class="settings-grid" id="settings-content">
+      <form id="settings-form" class="settings-groups">
         <div class="loading">Loading…</div>
+      </form>
+
+      <div class="sticky-save hidden" id="settings-save-bar">
+        <span id="settings-dirty-count">0 unsaved changes</span>
+        <div>
+          <button type="button" class="btn btn-ghost" id="btn-settings-discard">Discard</button>
+          <button type="button" class="btn btn-primary" id="btn-settings-save">💾 Save settings</button>
+        </div>
+      </div>
+
+      <!-- Model picker -->
+      <div class="settings-section">
+        <h2>Model</h2>
+        <p class="section-desc">Models Ollama currently has pulled. A model set here but not pulled makes every expense fail.</p>
+        <div id="model-list" class="model-list"><div class="loading">Loading…</div></div>
       </div>
 
       <!-- Prompt Template Editor -->
       <div class="settings-section">
-        <h2>Prompt Template</h2>
-        <p class="section-desc">Customize the LLM prompt. Use placeholders: {{title}}, {{amount}}, {{notes}}, {{categories}}</p>
-        <textarea id="prompt-template" class="form-control" rows="10" placeholder="Loading..."></textarea>
+        <h2>Prompt template</h2>
+        <p class="section-desc">
+          Used only when the word lists do not match. Placeholders:
+          <code>{{title}}</code> <code>{{amount}}</code> <code>{{notes}}</code>
+          <code>{{categories}}</code> <code>{{categoryList}}</code>.
+          <code>{{title}}</code> and <code>{{categories}}</code> are required.
+        </p>
+        <textarea id="prompt-template" class="form-control mono" rows="12" spellcheck="false"></textarea>
         <div class="button-row">
-          <button class="btn btn-primary" id="btn-save-prompt">💾 Save Prompt</button>
-          <button class="btn btn-secondary" id="btn-reset-prompt">🔄 Reset to Default</button>
+          <button class="btn btn-primary" id="btn-save-prompt">💾 Save prompt</button>
+          <button class="btn btn-secondary" id="btn-preview-prompt">👁 Preview</button>
+          <button class="btn btn-secondary" id="btn-reset-prompt">🔄 Reset to default</button>
+          <span class="pill" id="prompt-state"></span>
         </div>
-        <div id="prompt-alert" class="alert hidden"></div>
+        <pre class="preview hidden" id="prompt-preview"></pre>
       </div>
 
       <!-- Word Lists Manager -->
       <div class="settings-section">
-        <h2>German Word Lists</h2>
-        <p class="section-desc">Manage keywords for fast category matching (checked before calling LLM).</p>
+        <h2>German word lists</h2>
+        <p class="section-desc">
+          Deterministic keyword matching, tried before the LLM. Keywords of
+          <strong>5 characters or more</strong> also match inside German compounds;
+          shorter ones must be a whole word.
+        </p>
+
+        <div class="card subtle">
+          <label for="wordlist-test-input">Test a title against every list</label>
+          <div class="add-keyword-row">
+            <input type="text" id="wordlist-test-input" class="form-control" placeholder="e.g. Tankstellenrechnung" />
+            <button class="btn btn-secondary" id="btn-wordlist-test">Test</button>
+          </div>
+          <div id="wordlist-test-result"></div>
+        </div>
 
         <div class="wordlist-selector">
-          <label for="wordlist-select">Category List:</label>
+          <label for="wordlist-select">Word list</label>
           <select id="wordlist-select" class="form-control">
             <option value="">— select a list —</option>
           </select>
         </div>
 
         <div id="wordlist-content" class="wordlist-content hidden">
-          <h3 id="wordlist-name">—</h3>
+          <div class="wordlist-head">
+            <div>
+              <h3 id="wordlist-name">—</h3>
+              <p class="muted" id="wordlist-targets"></p>
+            </div>
+            <button class="btn btn-danger-ghost btn-sm" id="btn-wordlist-reset">Reset this list</button>
+          </div>
+
           <div class="keyword-list" id="keyword-list"></div>
 
           <div class="add-keyword-row">
-            <input type="text" id="new-keyword" class="form-control" placeholder="Add new keyword...">
+            <input type="text" id="new-keyword" class="form-control" placeholder="Add a keyword…" />
             <button class="btn btn-success" id="btn-add-keyword">+ Add</button>
           </div>
         </div>
-        <div id="wordlist-alert" class="alert hidden"></div>
       </div>
     </section>
   </main>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
 
   <script src="/js/app.js"></script>
 </body>

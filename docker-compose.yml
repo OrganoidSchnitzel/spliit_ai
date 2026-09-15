@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   spliit-ai:
     build: .
@@ -22,10 +20,23 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
       OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-60000}
+      # Must exceed SCHEDULER_CRON's interval, or Ollama unloads the model
+      # from memory between runs and re-reads it from disk every time.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-256}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-2048}
 
       # ── AI behaviour ──────────────────────────────────────────────────────
       # Minimum confidence (0–1) required to auto-apply a category.
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.6}
+
+      # Suggest and log without writing to Spliit. Worth 'true' for a first run.
+      DRY_RUN: ${DRY_RUN:-false}
+
+      # Optional shared secret for /api. Empty disables authentication.
+      API_TOKEN: ${API_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
       # ── Scheduler ────────────────────────────────────────────────────────
       # Set to 'false' to disable automatic periodic runs.
@@ -36,6 +47,13 @@ services:
       # ── Processing ───────────────────────────────────────────────────────
       # Maximum number of expenses to process per scheduler run.
       BATCH_SIZE: ${BATCH_SIZE:-10}
+
+      # Escalating wait (hours) before retrying an expense that fell below the
+      # threshold. After the last step it is parked instead of retried forever.
+      RETRY_BACKOFF_HOURS: ${RETRY_BACKOFF_HOURS:-1,6,24}
+
+      # ── History ──────────────────────────────────────────────────────────
+      HISTORY_RETENTION_DAYS: ${HISTORY_RETENTION_DAYS:-90}
 
       PORT: 3000
 

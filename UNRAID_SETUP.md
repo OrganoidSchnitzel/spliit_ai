@@ -145,7 +145,17 @@ docker run -d \
   spliit-ai:latest
 ```
 
-> The `-v` flag mounts a persistent volume so the processing history database (`data/history.db`) survives container restarts.
+> The `-v` flag mounts a persistent volume so the processing history, your
+> keyword edits and any settings changed in the UI survive container restarts.
+
+> **Make the folder writable by the container.** Spliit AI runs as a non-root
+> user (uid 1000). A bind mount you created as root arrives root-owned, and the
+> app cannot open its database — which is a crash at startup, not a warning:
+>
+> ```bash
+> mkdir -p /mnt/user/appdata/spliit-ai/data
+> chown -R 1000:1000 /mnt/user/appdata/spliit-ai/data
+> ```
 
 Check the logs to confirm everything started correctly:
 

@@ -28,6 +28,10 @@ pool.on('error', (err) => {
   console.error('[DB] Unexpected pool error:', err.message);
 });
 
+const debugEnabled = config.logLevel === 'debug';
+// Anything above this is worth surfacing even outside debug logging.
+const SLOW_QUERY_MS = 1000;
+
 /**
  * Run a query against the Spliit PostgreSQL database.
  * @param {string} text - SQL query
@@ -37,7 +41,12 @@ async function query(text, params) {
   const start = Date.now();
   const res = await pool.query(text, params);
   const duration = Date.now() - start;
-  console.debug(`[DB] query (${duration}ms): ${text.trim().substring(0, 80)}`);
+
+  if (debugEnabled) {
+    console.debug(`[DB] query (${duration}ms): ${text.trim().substring(0, 80)}`);
+  } else if (duration >= SLOW_QUERY_MS) {
+    console.warn(`[DB] slow query (${duration}ms): ${text.trim().substring(0, 120)}`);
+  }
   return res;
 }
 

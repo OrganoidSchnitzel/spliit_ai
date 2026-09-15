@@ -3,6 +3,10 @@
 Reviewed at `21ac875` (main) plus branch `copilot/add-manual-category-history-tab`.
 Everything below was reproduced against the checked-out code, not inferred from reading alone.
 
+> **Status: every finding in this document has been fixed.** This file is kept as
+> the record of what was wrong and why the fixes look the way they do. See
+> `CHANGELOG.md` for what shipped.
+
 ---
 
 ## 1. Blockers
