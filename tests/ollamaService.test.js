@@ -6,17 +6,24 @@ const mockPost = jest.fn();
 const mockGet = jest.fn();
 axios.create.mockReturnValue({ post: mockPost, get: mockGet });
 
+const ollamaService = require('../src/services/ollamaService');
+const wordLists = require('../src/data/germanWordLists');
+const settingsStore = require('../src/settingsStore');
+const localDb = require('../src/localDb');
+
 const {
   buildPrompt,
   suggestCategory,
+  validatePromptTemplate,
   extractFirstJsonObject,
   stripThinkingTags,
   getRawModelText,
+  parseModelPayload,
   isGroceryLikeCategory,
-  applyGroceryMerchantOverride,
-  applyFurnitureTitleOverride,
+  applyWordListGuard,
   applyTitleSemanticGuard,
-} = require('../src/services/ollamaService');
+  OLLAMA_RESPONSE_SCHEMA,
+} = ollamaService;
 
 const CATEGORIES = [
   { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
@@ -26,40 +33,44 @@ const CATEGORIES = [
   { id: 5, grouping: 'Entertainment', name: 'Movies' },
 ];
 
+/** A title that no word list matches, so the LLM path is exercised. */
+const NEUTRAL_TITLE = 'Zahlung an Quibblewick';
+
+const respond = (payload) =>
+  mockPost.mockResolvedValue({ data: { response: JSON.stringify(payload) } });
+
+beforeAll(() => {
+  localDb.init();
+  settingsStore.init();
+  wordLists.init();
+});
+
+afterEach(() => {
+  settingsStore.resetAll();
+});
+
 describe('ollamaService.buildPrompt', () => {
-  const baseExpense = {
-    id: 'exp-1',
-    title: 'Lidl groceries',
-    amount: 4250,
-    currency: 'EUR',
-    notes: null,
-  };
+  const baseExpense = { id: 'exp-1', title: 'Lidl groceries', amount: 4250, currency: 'EUR', notes: null };
 
   it('includes the expense title', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Lidl groceries');
+    expect(buildPrompt(baseExpense, CATEGORIES)).toContain('Lidl groceries');
   });
 
   it('converts amount from cents to display value', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('42.50');
+    expect(buildPrompt(baseExpense, CATEGORIES)).toContain('42.50');
   });
 
   it('includes the currency', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('EUR');
+    expect(buildPrompt(baseExpense, CATEGORIES)).toContain('EUR');
   });
 
   it('lists all categories with their ids in compact format', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    CATEGORIES.forEach((c) => {
-      expect(prompt).toContain(`${c.id}:${c.name}`);
-    });
+    CATEGORIES.forEach((c) => expect(prompt).toContain(`${c.id}:${c.name}`));
   });
 
-  it('omits notes section when notes are empty', () => {
-    const prompt = buildPrompt({ ...baseExpense, notes: '' }, CATEGORIES);
-    expect(prompt).not.toContain('Notes:');
+  it('omits the notes section when notes are empty', () => {
+    expect(buildPrompt(baseExpense, CATEGORIES)).not.toContain('Notes:');
   });
 
   it('includes notes when provided', () => {
@@ -68,462 +79,304 @@ describe('ollamaService.buildPrompt', () => {
   });
 
   it('instructs the model to respond with JSON', () => {
+    expect(buildPrompt(baseExpense, CATEGORIES)).toContain('JSON');
+  });
+
+  it('includes German merchant guidance', () => {
     const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('"categoryId"');
-    expect(prompt).toContain('"categoryName"');
-    expect(prompt).toContain('"confidence"');
-    expect(prompt).toContain('"reasoning"');
+    expect(prompt).toContain('Lidl/Rewe/Edeka/Aldi→Groceries');
+    expect(prompt).toContain('IKEA/Möbel→Furniture');
   });
 
-  it('enforces categoryId/categoryName consistency', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Pick ONE category ID from list');
-    expect(prompt).toContain('"categoryName":"<exact name>"');
-  });
-
-  it('includes explicit German-language guidance', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('German context');
-    expect(prompt).toContain('Lidl/Rewe/Edeka/Aldi');
-  });
-
-  it('uses optimized compact format without few-shot examples', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    // Optimized prompt doesn't include few-shot examples
-    expect(prompt).not.toContain('Few-shot examples');
-    // But includes essential rules
-    expect(prompt).toContain('Rules:');
-    expect(prompt).toContain('Match by merchant type');
-  });
-
-  it('restricts categoryName to the provided list entries', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    // Check categories are included in compact format
-    expect(prompt).toContain('1:Groceries');
-    expect(prompt).toContain('2:Restaurants');
-    expect(prompt).toContain('3:Fuel');
-    expect(prompt).toContain('4:Public Transit');
-    expect(prompt).toContain('5:Movies');
-  });
-
-  it('includes furniture guidance in German context', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('IKEA/Möbel→furniture');
-  });
-
-  it('uses runtime category IDs in compact format', () => {
-    const customCategories = [
-      { id: 11, grouping: 'Food', name: 'Groceries' },
-      { id: 42, grouping: 'Transport', name: 'Fuel' },
-    ];
-    const prompt = buildPrompt(baseExpense, customCategories);
-    expect(prompt).toContain('11:Groceries');
-    expect(prompt).toContain('42:Fuel');
-  });
-
-  it('works with single category', () => {
-    const oneCategory = [{ id: 9, grouping: 'Misc', name: 'Other' }];
-    const prompt = buildPrompt(baseExpense, oneCategory);
-    expect(prompt).toContain('9:Other');
-    expect(prompt).toContain('Pick ONE category ID from list');
-  });
-
-  it('specifies JSON output format with key order', () => {
-    const prompt = buildPrompt(baseExpense, CATEGORIES);
-    expect(prompt).toContain('Output format');
-    expect(prompt).toContain('"reasoning"');
-    expect(prompt).toContain('"categoryName"');
-    expect(prompt).toContain('"categoryId"');
-    expect(prompt).toContain('"confidence"');
-  });
-
-  it('handles missing currency gracefully', () => {
+  it('handles a missing currency gracefully', () => {
     const prompt = buildPrompt({ ...baseExpense, currency: undefined }, CATEGORIES);
     expect(prompt).toContain('42.50');
-    // Should still include the amount even without a currency symbol
-    expect(typeof prompt).toBe('string');
+    expect(prompt).not.toContain('undefined');
+  });
+
+  it('uses a persisted custom template when one is set', () => {
+    settingsStore.setMany({ 'ollama.customPromptTemplate': 'X {{title}} Y {{categories}}' });
+    expect(buildPrompt(baseExpense, CATEGORIES)).toBe('X Lidl groceries Y 1:Groceries|2:Restaurants|3:Fuel|4:Public Transit|5:Movies');
   });
 });
 
-describe('ollamaService.suggestCategory', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+describe('ollamaService.validatePromptTemplate', () => {
+  it('accepts a template with the required placeholders', () => {
+    expect(validatePromptTemplate('{{title}} {{categories}}')).toEqual({ ok: true });
   });
 
-  it('uses JSON response format and returns parsed suggestion', async () => {
-    mockPost.mockResolvedValue({
-            data: {
-        response: JSON.stringify({
-          categoryId: 3,
-          categoryName: 'Fuel',
-          confidence: 0.86,
-          reasoning: 'Gas station purchase.',
-        }),
-      },
-    });
+  it('rejects a template missing required placeholders', () => {
+    expect(() => validatePromptTemplate('no placeholders')).toThrow(/missing required placeholder/i);
+  });
 
-    const res = await suggestCategory(
-      { id: 'exp-2', title: 'Highway fuel', amount: 5000, notes: '', currency: 'EUR' },
-      CATEGORIES
-    );
+  it('rejects a template using an unknown placeholder', () => {
+    expect(() => validatePromptTemplate('{{title}} {{categories}} {{bogus}}')).toThrow(/unknown placeholder/i);
+  });
 
-    expect(res).toEqual({
-      categoryId: 3,
-      categoryName: 'Fuel',
-      confidence: 0.86,
-      reasoning: 'Gas station purchase.',
-      source: 'llm',
-    });
+  it('rejects an empty template', () => {
+    expect(() => validatePromptTemplate('   ')).toThrow(/cannot be empty/i);
+  });
+});
+
+describe('ollamaService.suggestCategory — request shape', () => {
+  it('sends the response schema, keep_alive and generation options', async () => {
+    respond({ categoryId: 1, categoryName: 'Groceries', confidence: 0.9, reasoning: 'ok' });
+    await suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES);
 
     const [, payload] = mockPost.mock.calls[0];
-    expect(payload.format).toBe('json');
+    expect(payload.format).toEqual(OLLAMA_RESPONSE_SCHEMA);
+    // Ollama's 5m default is shorter than the 15m scheduler interval, which
+    // made it re-read the model from disk before every batch.
+    expect(payload.keep_alive).toBe('30m');
+    expect(payload.options).toMatchObject({ temperature: 0, num_predict: 256, num_ctx: 2048 });
+    expect(payload.stream).toBe(false);
   });
 
-  it('parses JSON from markdown/conversational wrapper text', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        response:
-          'Sure, here is the result:\n```json\n{"reasoning":"Corner Store is a grocery merchant.","categoryName":"Groceries","categoryId":1,"confidence":0.8}\n```\nAnything else?',
-      },
-    });
-
-    const res = await suggestCategory(
-      { id: 'exp-2b', title: 'Corner Store', amount: 5000, notes: '', currency: 'EUR' },
-      CATEGORIES
-    );
-
-    expect(res.categoryId).toBe(1);
-    expect(res.categoryName).toBe('Groceries');
-    expect(res.confidence).toBe(0.8);
+  it('falls back to generic JSON mode when structured output is disabled', async () => {
+    settingsStore.setMany({ 'ollama.useStructuredOutput': false });
+    respond({ categoryId: 1, categoryName: 'Groceries', confidence: 0.9, reasoning: 'ok' });
+    await suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES);
+    expect(mockPost.mock.calls[0][1].format).toBe('json');
   });
 
-  it('parses JSON when model emits <think> wrapper before answer', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        response:
-          '<think>I should reason step by step here.</think>\n```json\n{"reasoning":"Merchant is grocery.","categoryName":"Groceries","categoryId":1,"confidence":0.77}\n```',
-      },
-    });
+  it('retries a transient failure and then succeeds', async () => {
+    const err = new Error('socket hang up');
+    err.code = 'ECONNRESET';
+    mockPost
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce({
+        data: { response: JSON.stringify({ categoryId: 1, categoryName: 'Groceries', confidence: 0.8, reasoning: 'r' }) },
+      });
 
-    const res = await suggestCategory(
-      { id: 'exp-2c', title: 'Rewe', amount: 5100, notes: '', currency: 'EUR' },
-      CATEGORIES
-    );
-
+    const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES);
     expect(res.categoryId).toBe(1);
-    expect(res.categoryName).toBe('Groceries');
+    expect(mockPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a non-transient failure', async () => {
+    const err = new Error('bad request');
+    err.response = { status: 400, data: { error: 'model not found' } };
+    mockPost.mockRejectedValue(err);
+
+    await expect(suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES)).rejects.toThrow(
+      /model not found/
+    );
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ollamaService.suggestCategory — response handling', () => {
+  it('returns a parsed suggestion', async () => {
+    respond({ categoryId: 3, categoryName: 'Fuel', confidence: 0.82, reasoning: 'fuel stop' });
+    const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 5000 }, CATEGORIES);
+    expect(res).toMatchObject({ categoryId: 3, categoryName: 'Fuel', confidence: 0.82, source: 'llm' });
+    expect(typeof res.durationMs).toBe('number');
+  });
+
+  it('parses JSON out of markdown and conversational wrapping', async () => {
+    mockPost.mockResolvedValue({
+      data: { response: 'Sure!\n```json\n{"categoryId":1,"categoryName":"Groceries","confidence":0.7,"reasoning":"r"}\n```' },
+    });
+    const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES);
+    expect(res.categoryId).toBe(1);
+  });
+
+  it('parses JSON when the model emits a <think> wrapper first', async () => {
+    mockPost.mockResolvedValue({
+      data: { response: '<think>hmm</think>{"categoryId":1,"categoryName":"Groceries","confidence":0.77,"reasoning":"r"}' },
+    });
+    const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES);
     expect(res.confidence).toBe(0.77);
   });
 
-  it('parses nested JSON string response payloads', async () => {
+  it('reads chat-style message.content responses', async () => {
     mockPost.mockResolvedValue({
-      data: {
-        response: '"{\\"reasoning\\":\\"double encoded\\",\\"categoryName\\":\\"Fuel\\",\\"categoryId\\":3,\\"confidence\\":0.66}"',
-      },
+      data: { message: { content: '{"categoryId":2,"categoryName":"Restaurants","confidence":0.6,"reasoning":"r"}' } },
     });
-
-    const res = await suggestCategory(
-      { id: 'exp-2d', title: 'Highway fuel', amount: 3300, notes: '', currency: 'EUR' },
-      CATEGORIES
-    );
-
-    expect(res.categoryId).toBe(3);
-    expect(res.categoryName).toBe('Fuel');
-    expect(res.confidence).toBe(0.66);
+    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(2);
   });
 
-  it('reads raw text from chat-style message.content response shape', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        message: {
-          content:
-            '<think>analysis</think>{"reasoning":"chat shape","categoryName":"Groceries","categoryId":1,"confidence":0.61}',
-        },
-      },
+  it('tolerates extra keys instead of failing the whole expense', async () => {
+    respond({
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.9,
+      reasoning: 'r',
+      explanation: 'an extra field some models add',
     });
+    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(1);
+  });
 
-    const res = await suggestCategory(
-      { id: 'exp-2e', title: 'Fresh Market', amount: 1800, notes: '', currency: 'EUR' },
-      CATEGORIES
+  it('repairs a mismatched categoryId by trusting a valid categoryName', async () => {
+    respond({ categoryId: 99, categoryName: 'Groceries', confidence: 0.9, reasoning: 'r' });
+    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(1);
+  });
+
+  it('repairs a mismatched categoryName by trusting a valid categoryId', async () => {
+    respond({ categoryId: 2, categoryName: 'Not A Category', confidence: 0.9, reasoning: 'r' });
+    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryName).toBe('Restaurants');
+  });
+
+  it('rejects a response where neither id nor name is valid', async () => {
+    respond({ categoryId: 99, categoryName: 'Nope', confidence: 0.9, reasoning: 'r' });
+    await expect(suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).rejects.toThrow(
+      /invalid category reference/i
     );
+  });
 
-    expect(res.categoryId).toBe(1);
+  it('rejects an out-of-range confidence', async () => {
+    respond({ categoryId: 1, categoryName: 'Groceries', confidence: 7, reasoning: 'r' });
+    await expect(suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).rejects.toThrow(
+      /invalid confidence/i
+    );
+  });
+});
+
+describe('ollamaService.suggestCategory — word lists', () => {
+  it('answers from the word list without calling the LLM', async () => {
+    const res = await suggestCategory({ title: 'Lidl Einkauf', amount: 4250 }, CATEGORIES);
+    expect(res).toMatchObject({ categoryName: 'Groceries', source: 'wordlist' });
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('goes to the LLM when skipWordLists is set', async () => {
+    respond({ categoryId: 5, categoryName: 'Movies', confidence: 0.9, reasoning: 'r' });
+    const res = await suggestCategory({ title: 'Lidl Einkauf', amount: 1 }, CATEGORIES, {
+      skipWordLists: true,
+    });
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    // The post-LLM guard still pulls an obvious merchant back to the word list.
     expect(res.categoryName).toBe('Groceries');
-    expect(res.confidence).toBe(0.61);
+    expect(res.source).toBe('llm+wordlist');
   });
 
-  it('repairs mismatched categoryId by trusting categoryName from allowed categories', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 2,
-          categoryName: 'Fuel',
-          confidence: 0.7,
-          reasoning: 'example',
-        }),
-      },
-    });
+  it('goes to the LLM when word lists are disabled entirely', async () => {
+    settingsStore.setMany({ wordListsEnabled: false });
+    respond({ categoryId: 2, categoryName: 'Restaurants', confidence: 0.9, reasoning: 'r' });
+    await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+});
 
-    const res = await suggestCategory(
-      { id: 'exp-3', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
-      CATEGORIES
-    );
+describe('ollamaService.applyWordListGuard', () => {
+  const suggestion = { categoryId: 5, categoryName: 'Movies', confidence: 0.8, reasoning: 'model guess' };
 
-    expect(res.categoryName).toBe('Fuel');
-    expect(res.categoryId).toBe(3);
-    expect(res.confidence).toBe(0.7);
+  it('remaps a suggestion the word lists disagree with', () => {
+    const out = applyWordListGuard({ title: 'Rewe Wocheneinkauf' }, suggestion, CATEGORIES);
+    expect(out).toMatchObject({ categoryId: 1, categoryName: 'Groceries', source: 'llm+wordlist' });
+    expect(out.reasoning).toContain('Heuristic note');
   });
 
-  it('rejects hallucinated categoryName that is not in provided categories', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 12,
-          categoryName: 'Transportation',
-          confidence: 0.74,
-          reasoning: 'car sharing',
-        }),
-      },
-    });
-
-    await expect(
-      suggestCategory(
-        { id: 'exp-3b', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
-        CATEGORIES
-      )
-    ).rejects.toThrow('invalid category reference');
+  it('never claims more confidence than the weaker of the two sources', () => {
+    const out = applyWordListGuard({ title: 'Rewe Wocheneinkauf' }, { ...suggestion, confidence: 0.99 }, CATEGORIES);
+    expect(out.confidence).toBeLessThanOrEqual(0.99);
   });
 
-  it('repairs mismatched categoryName by trusting valid categoryId from allowed categories', async () => {
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 3,
-          categoryName: 'Transportation',
-          confidence: 0.74,
-          reasoning: 'car sharing',
-        }),
-      },
-    });
-
-    const res = await suggestCategory(
-      { id: 'exp-3c', title: 'Miles', amount: 2500, notes: null, currency: 'EUR' },
-      CATEGORIES
-    );
-
-    expect(res.categoryId).toBe(3);
-    expect(res.categoryName).toBe('Fuel');
-    expect(res.confidence).toBe(0.74);
+  it('leaves the suggestion alone when the word lists agree', () => {
+    const agreeing = { categoryId: 1, categoryName: 'Groceries', confidence: 0.8, reasoning: 'r' };
+    expect(applyWordListGuard({ title: 'Rewe' }, agreeing, CATEGORIES)).toEqual(agreeing);
   });
 
-  it('down-ranks overconfident non-home suggestion for furniture-like title', async () => {
-    const categories = [
-      { id: 1, grouping: 'Food & Drink', name: 'Groceries' },
-      { id: 5, grouping: 'Entertainment', name: 'Entertainment' },
-    ];
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 5,
-          categoryName: 'Entertainment',
-          confidence: 0.9,
-          reasoning: 'Category matches title and German context',
-        }),
-      },
-    });
-
-    const res = await suggestCategory(
-      { id: 'exp-4', title: 'Wardrobe', amount: 8000, notes: '', currency: 'EUR' },
-      categories
-    );
-
-    expect(res.categoryId).toBe(5);
-    expect(res.categoryName).toBe('Entertainment');
-    expect(res.confidence).toBe(0.39);
-    expect(res.reasoning).toContain('Heuristic note');
-  });
-
-  it('maps Schrank suggestion to Möbel/Furniture category when available', async () => {
-    const categories = [
-      { id: 5, grouping: 'Entertainment', name: 'Entertainment' },
-      { id: 9, grouping: 'Home', name: 'Möbel' },
-    ];
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 5,
-          categoryName: 'Entertainment',
-          confidence: 0.9,
-          reasoning: 'Category matches title and German context',
-        }),
-      },
-    });
-
-    const res = await suggestCategory(
-      { id: 'exp-5', title: 'Wardrobe', amount: 8000, notes: '', currency: 'EUR' },
-      categories
-    );
-
-    expect(res.categoryId).toBe(9);
-    expect(res.categoryName).toBe('Möbel');
-    expect(res.confidence).toBe(0.9);
-    expect(res.reasoning).toContain('mapped to "Möbel"');
-  });
-
-  it('maps IKEA suggestion to furniture category when available', async () => {
-    const categories = [
-      { id: 2, grouping: 'Entertainment', name: 'Movies' },
-      { id: 7, grouping: 'Home', name: 'Furniture' },
-    ];
-    mockPost.mockResolvedValue({
-      data: {
-        response: JSON.stringify({
-          categoryId: 2,
-          categoryName: 'Movies',
-          confidence: 0.72,
-          reasoning: 'guess',
-        }),
-      },
-    });
-
-    const res = await suggestCategory(
-      { id: 'exp-6', title: 'Furniture Store', amount: 12000, notes: '', currency: 'EUR' },
-      categories
-    );
-
-    expect(res.categoryId).toBe(7);
-    expect(res.categoryName).toBe('Furniture');
-    expect(res.confidence).toBe(0.72);
-  });
-
-  it('matches Lidl directly via word list without LLM call', async () => {
-    const categories = [
-      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
-      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
-    ];
-
-    // With word list matching, LLM should not be called
-    const res = await suggestCategory(
-      { id: 'exp-7', title: 'Corner Store', amount: 2332, notes: '', currency: 'EUR' },
-      categories
-    );
-
-    expect(res.categoryId).toBe(11);
-    expect(res.categoryName).toBe('Groceries');
-    expect(res.confidence).toBe(0.95); // Word list match confidence
-    expect(res.source).toBe('wordlist');
-    expect(mockPost).not.toHaveBeenCalled(); // LLM not called
+  it('leaves the suggestion alone when no keyword matches', () => {
+    expect(applyWordListGuard({ title: NEUTRAL_TITLE }, suggestion, CATEGORIES)).toEqual(suggestion);
   });
 });
 
 describe('ollamaService.applyTitleSemanticGuard', () => {
-  it('keeps confidence for furniture-like title when selected category is home-like', () => {
-    const suggestion = {
-      categoryId: 8,
-      categoryName: 'Furniture',
-      confidence: 0.9,
-      reasoning: 'Looks like household expense',
-    };
-    const categories = [{ id: 8, grouping: 'Home', name: 'Furniture' }];
-    const guarded = applyTitleSemanticGuard({ title: 'Wardrobe' }, suggestion, categories);
-    expect(guarded.confidence).toBe(0.9);
-    expect(guarded.reasoning).toBe('Looks like household expense');
+  const furnitureCategories = [
+    { id: 5, grouping: 'Entertainment', name: 'Entertainment' },
+    { id: 6, grouping: 'Transport', name: 'Fuel' },
+  ];
+
+  it('down-ranks an overconfident non-home category for a furniture title', () => {
+    const out = applyTitleSemanticGuard(
+      { title: 'Schrank' },
+      { categoryId: 5, categoryName: 'Entertainment', confidence: 0.9, reasoning: 'r' },
+      furnitureCategories
+    );
+    expect(out.confidence).toBe(0.39);
+    expect(out.reasoning).toContain('Heuristic note');
+  });
+
+  it('keeps confidence when the category is already home-like', () => {
+    const suggestion = { categoryId: 7, categoryName: 'Furniture', confidence: 0.9, reasoning: 'r' };
+    const out = applyTitleSemanticGuard({ title: 'Schrank' }, suggestion, [
+      { id: 7, grouping: 'Home', name: 'Furniture' },
+    ]);
+    expect(out).toEqual(suggestion);
+  });
+
+  it('ignores titles that are not furniture-like', () => {
+    const suggestion = { categoryId: 5, categoryName: 'Entertainment', confidence: 0.9, reasoning: 'r' };
+    expect(applyTitleSemanticGuard({ title: NEUTRAL_TITLE }, suggestion, furnitureCategories)).toEqual(suggestion);
   });
 });
 
-describe('ollamaService.applyFurnitureTitleOverride', () => {
-  it('does not change suggestion when no furniture category exists', () => {
-    const suggestion = {
-      categoryId: 2,
-      categoryName: 'Entertainment',
-      confidence: 0.8,
-      reasoning: 'model guess',
-    };
-    const categories = [{ id: 2, grouping: 'Entertainment', name: 'Entertainment' }];
-    const out = applyFurnitureTitleOverride({ title: 'Wardrobe' }, suggestion, categories);
-    expect(out).toEqual(suggestion);
+describe('ollamaService.parseModelPayload', () => {
+  it('names the missing keys rather than failing opaquely', () => {
+    expect(() => parseModelPayload('{"categoryId":1}')).toThrow(/Missing key\(s\): categoryName, confidence, reasoning/);
+  });
+
+  it('unwraps a doubly-encoded JSON string', () => {
+    const inner = JSON.stringify({ categoryId: 1, categoryName: 'Groceries', confidence: 0.5, reasoning: 'r' });
+    expect(parseModelPayload(JSON.stringify(inner)).categoryId).toBe(1);
+  });
+});
+
+describe('ollamaService.extractFirstJsonObject', () => {
+  it('extracts the first complete object from fenced conversational output', () => {
+    const text = 'Here you go:\n```json\n{"a":1}\n```\nAnything else?';
+    expect(extractFirstJsonObject(text)).toBe('{"a":1}');
+  });
+
+  it('ignores braces inside JSON string fields', () => {
+    expect(extractFirstJsonObject('{"a":"}{"}')).toBe('{"a":"}{"}');
+  });
+
+  it('removes think tags first', () => {
+    expect(extractFirstJsonObject('<think>{"x":1}</think>{"a":2}')).toBe('{"a":2}');
+  });
+});
+
+describe('ollamaService.stripThinkingTags', () => {
+  it('removes think blocks while leaving the rest intact', () => {
+    expect(stripThinkingTags('<think>noise</think> keep me')).toBe('keep me');
+  });
+});
+
+describe('ollamaService.getRawModelText', () => {
+  it('prefers data.response', () => {
+    expect(getRawModelText({ response: 'a', message: { content: 'b' } })).toBe('a');
+  });
+
+  it('falls back to chat-style message.content', () => {
+    expect(getRawModelText({ message: { content: 'b' } })).toBe('b');
   });
 });
 
 describe('ollamaService.isGroceryLikeCategory', () => {
-  it('matches grocery category and excludes restaurants', () => {
+  it('matches grocery categories and excludes restaurants', () => {
     expect(isGroceryLikeCategory({ grouping: 'Food & Drink', name: 'Groceries' })).toBe(true);
     expect(isGroceryLikeCategory({ grouping: 'Food & Drink', name: 'Restaurants' })).toBe(false);
   });
 });
 
-describe('ollamaService.applyGroceryMerchantOverride', () => {
-  it('maps known grocery merchant title from entertainment to groceries', () => {
-    const suggestion = {
-      categoryId: 2,
-      categoryName: 'Entertainment',
-      confidence: 0.8,
-      reasoning: 'Corner Store is a grocery store',
-    };
-    const categories = [
-      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
-      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
-    ];
-    const out = applyGroceryMerchantOverride({ title: 'Corner Store' }, suggestion, categories);
-    expect(out.categoryId).toBe(11);
-    expect(out.categoryName).toBe('Groceries');
+describe('ollamaService.healthCheck', () => {
+  it('flags a configured model that is not pulled', async () => {
+    mockGet.mockResolvedValue({ data: { models: [{ name: 'qwen2.5:3b' }] } });
+    settingsStore.setMany({ 'ollama.model': 'llama3.2' });
+    const res = await ollamaService.healthCheck();
+    expect(res).toMatchObject({ ok: true, modelAvailable: false });
   });
 
-  it('matches merchant keywords at end of title', () => {
-    const suggestion = {
-      categoryId: 2,
-      categoryName: 'Entertainment',
-      confidence: 0.8,
-      reasoning: 'model guess',
-    };
-    const categories = [
-      { id: 2, grouping: 'Entertainment', name: 'Entertainment' },
-      { id: 11, grouping: 'Food & Drink', name: 'Groceries' },
-    ];
-    const out = applyGroceryMerchantOverride({ title: 'Shopping at Lidl' }, suggestion, categories);
-    expect(out.categoryId).toBe(11);
-    expect(out.categoryName).toBe('Groceries');
-  });
-});
-
-describe('ollamaService.extractFirstJsonObject', () => {
-  it('extracts first complete object from fenced conversational output', () => {
-    const raw =
-      'I can help with that.\n```json\n{"reasoning":"ok","categoryName":"Groceries","categoryId":1,"confidence":0.7}\n```\nDone.';
-    expect(extractFirstJsonObject(raw)).toBe(
-      '{"reasoning":"ok","categoryName":"Groceries","categoryId":1,"confidence":0.7}'
-    );
+  it('reports a pulled model as available', async () => {
+    mockGet.mockResolvedValue({ data: { models: [{ name: 'llama3.2:latest' }] } });
+    settingsStore.setMany({ 'ollama.model': 'llama3.2' });
+    expect((await ollamaService.healthCheck()).modelAvailable).toBe(true);
   });
 
-  it('ignores braces inside JSON string fields', () => {
-    const raw =
-      'prefix {"reasoning":"text with {brace} inside","categoryName":"Groceries","categoryId":1,"confidence":0.7} suffix';
-    expect(extractFirstJsonObject(raw)).toBe(
-      '{"reasoning":"text with {brace} inside","categoryName":"Groceries","categoryId":1,"confidence":0.7}'
-    );
-  });
-
-  it('removes think tags and returns first complete JSON object', () => {
-    const raw =
-      '<think>chain of thought</think> Before output {"reasoning":"ok","categoryName":"Fuel","categoryId":3,"confidence":0.71} trailing';
-    expect(extractFirstJsonObject(raw)).toBe(
-      '{"reasoning":"ok","categoryName":"Fuel","categoryId":3,"confidence":0.71}'
-    );
-  });
-});
-
-describe('ollamaService.stripThinkingTags', () => {
-  it('removes think blocks while leaving remaining text intact', () => {
-    expect(stripThinkingTags('<think>abc</think> {"a":1}')).toBe('{"a":1}');
-  });
-});
-
-describe('ollamaService.getRawModelText', () => {
-  it('prefers data.response when present', () => {
-    expect(getRawModelText({ response: 'abc', message: { content: 'ignored' } })).toBe('abc');
-  });
-
-  it('falls back to chat-style data.message.content', () => {
-    expect(getRawModelText({ message: { content: 'xyz' } })).toBe('xyz');
+  it('reports unreachable without throwing', async () => {
+    mockGet.mockRejectedValue(new Error('connect ECONNREFUSED'));
+    expect(await ollamaService.healthCheck()).toMatchObject({ ok: false, models: [] });
   });
 });

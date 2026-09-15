@@ -4,20 +4,38 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 
 ## Features
 
-- **Word list pre-filtering** – common German merchants (Lidl, Rewe, IKEA, etc.) are matched instantly without LLM calls, resulting in 2-3x faster processing.
-- **Optimized for Intel N100** – efficient prompt design and configurable batch processing for low-power systems with 16GB RAM.
-- **Automatic categorization** – a scheduled job periodically scans uncategorized expenses and assigns the most likely category using a local Ollama model.
-- **Confidence threshold** – suggestions below the configured threshold are not applied automatically, preventing low-quality assignments.
-- **Customizable prompt template** – edit the LLM prompt directly in the UI to tune accuracy and performance.
-- **Word list management** – add/remove keywords for fast category matching via the Settings UI, with manual additions persisted in the data volume.
-- **Playground** – manually test AI suggestions on any expense before committing changes to the database.
-- **Dashboard** – see the health of all connected services and the list of uncategorized expenses at a glance.
-- **Processing history** – every categorization attempt is logged to a local SQLite database so you can audit what was applied.
+- **Word list pre-filtering** – common German merchants (Lidl, Rewe, IKEA, …) are matched
+  instantly without an LLM call. Matching runs at word boundaries and understands German
+  compounds in both directions (*Tankstellen*rechnung, Kleider*schrank*) and umlaut
+  spellings (`möbel` = `moebel`). When two lists match a title equally well, the decision
+  is handed to the LLM rather than guessed.
+- **Optimized for Intel N100** – compact prompts, `keep_alive` tuned so the model is not
+  re-read from disk between runs, `temperature: 0` for reproducible results, and schema-
+  constrained decoding.
+- **Automatic categorization** – a scheduled job scans uncategorized expenses and assigns
+  the most likely category using a local Ollama model, with an escalating retry backoff so
+  an expense it cannot categorize does not consume the batch forever.
+- **Confidence threshold** – suggestions below the threshold are held for review.
+- **Dry-run mode** – suggest and log without writing anything to Spliit.
+- **Settings in the UI** – 18 settings are editable at runtime and persisted to the data
+  volume; environment variables supply the defaults.
+- **Customizable prompt template** – edit and preview the LLM prompt in the UI. Validated,
+  and persisted across restarts.
+- **Word list management** – add/remove keywords in the Settings UI, test a title against
+  every list, and reset a list to its shipped state. Additions *and* removals persist.
+- **Playground** – test a suggestion on a real or made-up expense, and see which keyword
+  decided the outcome.
+- **Dashboard** – service health, outstanding work, and inline category assignment.
+- **Processing history** – every attempt is logged to SQLite, with filtering, search and
+  paging. Corrections you make by hand are recorded and summarised, so you can see where
+  the model is going wrong.
 - **REST API** – trigger runs, get suggestions, or apply categories programmatically.
-- **Docker-ready** – a `Dockerfile` and `docker-compose.yml` are included for easy deployment alongside your existing Spliit and Ollama containers.
+  Optional shared-secret authentication.
+- **Docker-ready** – a `Dockerfile` and `docker-compose.yml` are included.
 - **Unraid-ready** – see [UNRAID_SETUP.md](UNRAID_SETUP.md) for step-by-step instructions.
 
-> **New in v1.0**: [Optimization Guide for Intel N100](OPTIMIZATION_GUIDE.md) with recommended LLM models and performance tips.
+> See [CHANGELOG.md](CHANGELOG.md) for what changed in v1.1, and
+> [ANALYSIS.md](ANALYSIS.md) for the review that drove it.
 
 ---
 
@@ -131,18 +149,35 @@ All endpoints are under `/api`.
 |--------|------|-------------|
 | `GET` | `/api/health` | Service health (DB + Ollama + scheduler) |
 | `GET` | `/api/categories` | List all Spliit categories |
-| `GET` | `/api/expenses/uncategorized` | List uncategorized expenses |
-| `POST` | `/api/expenses/:id/suggest` | Get an AI suggestion (no DB write) |
-| `POST` | `/api/expenses/:id/apply` | Apply a category to an expense |
-| `POST` | `/api/process` | Manually trigger a batch run |
-| `GET` | `/api/history` | Processing history + aggregate stats |
-| `GET` | `/api/settings` | Current configuration |
-| `GET` | `/api/wordlists` | Get all German word lists |
-| `POST` | `/api/wordlists/:listName/keywords` | Add keyword to word list |
-| `DELETE` | `/api/wordlists/:listName/keywords/:keyword` | Remove keyword from word list |
-| `GET` | `/api/prompt/template` | Get current prompt template |
-| `POST` | `/api/prompt/template` | Update prompt template |
-| `DELETE` | `/api/prompt/template` | Reset to default prompt |
+| `GET` | `/api/expenses/uncategorized` | Uncategorized expenses + total outstanding |
+| `POST` | `/api/expenses/:id/suggest` | Get a suggestion (no DB write) |
+| `POST` | `/api/expenses/preview` | Suggest for a made-up expense that need not exist |
+| `POST` | `/api/expenses/:id/apply` | Apply a category; recorded as a manual correction |
+| `POST` | `/api/expenses/:id/park` | Stop retrying this expense |
+| `DELETE` | `/api/expenses/:id/park` | Resume retrying it |
+| `POST` | `/api/process` | Trigger a batch run (`{ force, dryRun }`) |
+| `GET` | `/api/process/status` | Whether a run is in flight, and the last result |
+| `GET` | `/api/history` | History (`?limit&offset&status&search`) + stats |
+| `GET` | `/api/history/corrections` | Where a manual correction overrode a suggestion |
+| `DELETE` | `/api/history` | Clear the log |
+| `POST` | `/api/history/prune` | Apply the retention policy now |
+| `GET` | `/api/settings` | Effective settings, the schema, and read-only process config |
+| `PATCH` | `/api/settings` | Update settings (validated, all-or-nothing) |
+| `DELETE` | `/api/settings/:key` | Revert one setting to its environment default |
+| `DELETE` | `/api/settings` | Revert every setting |
+| `GET` | `/api/models` | Models Ollama has pulled, plus recommendations |
+| `GET` | `/api/wordlists` | All word lists, annotated with your edits |
+| `POST` | `/api/wordlists/test` | Explain what a title would match |
+| `POST` | `/api/wordlists/:listName/keywords` | Add a keyword |
+| `DELETE` | `/api/wordlists/:listName/keywords/:keyword` | Remove a keyword |
+| `POST` | `/api/wordlists/:listName/reset` | Restore a list's shipped keywords (`all` for every list) |
+| `GET` | `/api/prompt/template` | Current prompt template |
+| `POST` | `/api/prompt/template` | Update it (validated, persisted) |
+| `POST` | `/api/prompt/preview` | Render a template against a sample expense |
+| `DELETE` | `/api/prompt/template` | Reset to the built-in prompt |
+
+When `API_TOKEN` is set, every endpoint except `/api/health` requires
+`X-Api-Token: <token>` or `Authorization: Bearer <token>`.
 
 ### Example: get a suggestion
 
@@ -189,15 +224,37 @@ Tests use [Jest](https://jestjs.io/) with all external services mocked (no live 
 
 ## How it works
 
-1. **Scheduler** fires according to `SCHEDULER_CRON` (default every 15 minutes).
-2. **categorizationService** queries the database for expenses with `categoryId = 0` (uncategorized), up to `BATCH_SIZE`.
-3. **Word list matching** – first checks if the expense title matches any German keywords across 37 specialized lists (e.g., "Lidl" → Groceries, "Deutsche Bahn" → Bus/Train). If matched, returns immediately with high confidence (0.95) without calling the LLM. Covers all official [Spliit categories](https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql).
-4. **ollamaService** (if no word list match) builds an optimized prompt containing the expense details and available categories, then calls the Ollama `/api/generate` endpoint with `format: "json"` to force structured output.
-5. The response is parsed and validated. If `confidence ≥ CONFIDENCE_THRESHOLD`, the category is written to the database immediately. Otherwise, it is left for manual review via the Playground.
-6. Every attempt (applied, low confidence, or error) is recorded in the **processing history** (SQLite, `data/history.db`).
-7. Manually added word-list keywords are persisted in `data/manual-keywords.json` so they survive container updates when `/app/data` is mounted.
+1. **Scheduler** fires according to `SCHEDULER_CRON` (default every 15 minutes). A run
+   will not start while another is still going.
+2. **categorizationService** queries for expenses with `categoryId = 0`, excluding parked
+   ones, then filters to those actually *due*: an expense that has already been attempted
+   waits out an escalating backoff (`RETRY_BACKOFF_HOURS`, default 1h → 6h → 24h) before
+   being tried again, and is parked after the last step. Without this, an expense the model
+   cannot categorize is re-sent on every run forever and starves everything older than it.
+3. **Word list matching** runs first, across 37 lists covering all official
+   [Spliit categories](https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql).
+   Keywords match at word boundaries; those of 5+ characters also match inside German
+   compounds, and 6+ characters at the end of one. Confidence reflects match quality
+   (0.80 for a short whole word up to 0.95 for a multi-word phrase). If two lists match
+   equally well the result is discarded as ambiguous and the LLM decides.
+4. **ollamaService** (on a word-list miss) builds a compact prompt and calls
+   `/api/generate` with the response schema as `format`, so decoding is constrained to the
+   contract. `keep_alive` keeps the model resident between runs; `temperature: 0` makes the
+   result reproducible. Transient failures are retried with backoff.
+5. The response is validated, then re-checked against the word lists: if they disagree with
+   the model on an unambiguous merchant, the word list wins and the confidence drops to the
+   weaker of the two.
+6. If `confidence ≥ CONFIDENCE_THRESHOLD` the category is written to Spliit — unless
+   `DRY_RUN` is on. Otherwise it is held for review.
+7. Every attempt is recorded in the **processing history** (SQLite, `data/app.db`),
+   including which source decided it and how long it took. Corrections you make by hand
+   are recorded too, and surfaced in the History tab.
+8. Your word-list edits live in `data/manual-keywords.json` and your settings in the same
+   SQLite database, so both survive container updates when `/app/data` is mounted.
 
-**Performance**: With word lists enabled, 60-80% of common German expenses are categorized instantly without LLM calls, resulting in 2-3x faster processing.
+**Performance**: with word lists enabled, most common German expenses are categorized
+without an LLM call at all. The History tab reports the actual split and the average LLM
+latency for your setup.
 
 ---
 
