@@ -4,7 +4,9 @@ WORKDIR /app
 
 # better-sqlite3 has no musl prebuild, so it compiles from source here. The
 # toolchain is removed again in the same layer to keep the image small.
-RUN apk add --no-cache --virtual .build-deps python3 make g++
+# su-exec stays: the entrypoint uses it to drop privileges.
+RUN apk add --no-cache su-exec \
+    && apk add --no-cache --virtual .build-deps python3 make g++
 
 # Install dependencies first (layer caching)
 COPY package*.json ./
@@ -13,18 +15,14 @@ RUN npm ci --omit=dev && npm cache clean --force \
 
 # Copy source
 COPY src/ ./src/
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /app/data
 
-# The image already ships a non-root `node` user at uid/gid 1000, so reuse it
-# rather than creating a second user at the same ids (which fails the build).
-#
-# Create the data directory and hand it to that user. Docker copies this
-# ownership onto a fresh named volume; without it the volume arrives root-owned
-# and the app cannot open its SQLite database, which is a crash loop at startup
-# rather than a degraded feature. Bind mounts are *not* copied, so a host
-# directory must be chowned to 1000:1000 — see UNRAID_SETUP.md.
-RUN mkdir -p /app/data && chown -R node:node /app/data
-
-USER node
+# The container starts as root and the entrypoint immediately drops to
+# PUID:PGID (default 99:100, Unraid's nobody:users) after making /app/data
+# writable by that user. Pinning a uid in the image instead would mean the
+# container only starts when the host directory happens to match it.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 3000
 
