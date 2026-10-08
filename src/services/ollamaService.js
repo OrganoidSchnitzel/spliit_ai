@@ -67,7 +67,9 @@ async function healthCheck() {
       model: configured,
       // A configured model that is not pulled is the single most common
       // cause of "every expense errors", and it was invisible before.
-      modelAvailable: models.some((m) => m === configured || m.split(':')[0] === configured.split(':')[0]),
+      modelAvailable: models.some(
+        (m) => m === configured || m.split(':')[0] === configured.split(':')[0]
+      ),
     };
   } catch (err) {
     return { ok: false, models: [], error: err.message };
@@ -86,8 +88,7 @@ function buildPrompt(expense, categories) {
 
   const categoryList = categories.map((c) => `${c.id}:${c.name}`).join('|');
   const amountFormatted = formatAmount(expense);
-  const notesPart =
-    expense.notes && expense.notes.trim() ? ` Notes:${expense.notes.trim()}` : '';
+  const notesPart = expense.notes && expense.notes.trim() ? ` Notes:${expense.notes.trim()}` : '';
 
   return `Categorize expense. Return JSON only.
 Title:${expense.title}
@@ -137,9 +138,7 @@ function validatePromptTemplate(template) {
   if (missing.length) {
     throw Object.assign(
       new Error(
-        `Template is missing required placeholder(s): ${missing
-          .map((m) => `{{${m}}}`)
-          .join(', ')}`
+        `Template is missing required placeholder(s): ${missing.map((m) => `{{${m}}}`).join(', ')}`
       ),
       { statusCode: 400 }
     );
@@ -208,7 +207,9 @@ function stripMarkdown(text) {
 
 /** Remove reasoning/thinking wrapper tags emitted by some models. */
 function stripThinkingTags(text) {
-  return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .trim();
 }
 
 /**
@@ -299,9 +300,7 @@ function parseModelPayload(raw) {
   // single stray field like "explanation" failed the whole expense.
   const missing = REQUIRED_KEYS.filter((key) => parsed[key] === undefined);
   if (missing.length) {
-    throw new Error(
-      `Invalid response shape from Ollama. Missing key(s): ${missing.join(', ')}`
-    );
+    throw new Error(`Invalid response shape from Ollama. Missing key(s): ${missing.join(', ')}`);
   }
 
   return parsed;
@@ -495,8 +494,7 @@ async function suggestCategory(expense, categories, opts = {}) {
   const parsed = parseModelPayload(getRawModelText(response.data));
 
   const categoryId = parseInt(parsed.categoryId, 10);
-  const categoryName =
-    typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '';
+  const categoryName = typeof parsed.categoryName === 'string' ? parsed.categoryName.trim() : '';
   const confidence = parseFloat(parsed.confidence);
 
   if (!categoryName) {

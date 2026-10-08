@@ -18,7 +18,10 @@ jest.mock('../src/services/ollamaService', () => {
   return {
     ...real,
     healthCheck: jest.fn().mockResolvedValue({
-      ok: true, models: ['llama3.2'], model: 'llama3.2', modelAvailable: true,
+      ok: true,
+      models: ['llama3.2'],
+      model: 'llama3.2',
+      modelAvailable: true,
     }),
     suggestCategory: jest.fn(),
   };
@@ -49,7 +52,11 @@ const MOCK_EXPENSE = {
 };
 
 /** Route db.query by the SQL it receives, so call ordering does not matter. */
-function mockDb({ expense = MOCK_EXPENSE, categories = MOCK_CATEGORIES, uncategorized = [MOCK_EXPENSE] } = {}) {
+function mockDb({
+  expense = MOCK_EXPENSE,
+  categories = MOCK_CATEGORIES,
+  uncategorized = [MOCK_EXPENSE],
+} = {}) {
   db.query.mockImplementation((sql) => {
     if (sql.includes('FROM "Category"')) return Promise.resolve({ rows: categories });
     if (sql.includes('COUNT(*)')) return Promise.resolve({ rows: [{ n: uncategorized.length }] });
@@ -67,7 +74,10 @@ beforeEach(() => {
   categorizationService.invalidateCategoryCache();
   db.healthCheck.mockResolvedValue(true);
   ollamaService.healthCheck.mockResolvedValue({
-    ok: true, models: ['llama3.2'], model: 'llama3.2', modelAvailable: true,
+    ok: true,
+    models: ['llama3.2'],
+    model: 'llama3.2',
+    modelAvailable: true,
   });
   mockDb();
 });
@@ -82,7 +92,10 @@ describe('GET /api/health', () => {
 
   it('reports degraded when the configured model is not pulled', async () => {
     ollamaService.healthCheck.mockResolvedValue({
-      ok: true, models: ['qwen2.5:3b'], model: 'llama3.2', modelAvailable: false,
+      ok: true,
+      models: ['qwen2.5:3b'],
+      model: 'llama3.2',
+      modelAvailable: false,
     });
     const res = await request(app).get('/api/health');
     expect(res.body.status).toBe('degraded');
@@ -187,8 +200,11 @@ describe('GET /api/expenses/uncategorized', () => {
 describe('POST /api/expenses/:id/suggest', () => {
   beforeEach(() => {
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.88,
-      reasoning: 'Title mentions supermarket.', source: 'llm',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.88,
+      reasoning: 'Title mentions supermarket.',
+      source: 'llm',
     });
   });
 
@@ -218,7 +234,9 @@ describe('POST /api/expenses/preview', () => {
     // Use the real implementation here: the point of this test is that a
     // word-list hit short-circuits before any HTTP call to Ollama.
     ollamaService.suggestCategory.mockImplementation(actualOllama.suggestCategory);
-    const res = await request(app).post('/api/expenses/preview').send({ title: 'Rewe Markt', amount: 1200 });
+    const res = await request(app)
+      .post('/api/expenses/preview')
+      .send({ title: 'Rewe Markt', amount: 1200 });
     expect(res.status).toBe(200);
     expect(res.body.suggestion.categoryName).toBe('Groceries');
     expect(res.body.suggestion.source).toBe('wordlist');
@@ -241,7 +259,8 @@ describe('POST /api/expenses/:id/apply', () => {
     expect(updates[0][1]).toEqual([1, 'exp-abc']);
 
     expect(historyService.getHistory({ limit: 1 }).rows[0]).toMatchObject({
-      status: 'manual', source: 'manual',
+      status: 'manual',
+      source: 'manual',
     });
   });
 
@@ -305,7 +324,11 @@ describe('POST /api/process', () => {
   it('returns 409 rather than starting a second concurrent run', async () => {
     mockDb({ uncategorized: [MOCK_EXPENSE] });
     let release;
-    ollamaService.suggestCategory.mockReturnValue(new Promise((r) => { release = r; }));
+    ollamaService.suggestCategory.mockReturnValue(
+      new Promise((r) => {
+        release = r;
+      })
+    );
 
     // Take the lock through the service directly. runBatch assigns its lock
     // synchronously, so this is deterministic — racing two HTTP round trips is
@@ -317,7 +340,13 @@ describe('POST /api/process', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/already in progress/i);
 
-    release({ categoryId: 1, categoryName: 'Groceries', confidence: 0.1, reasoning: 'r', source: 'llm' });
+    release({
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.1,
+      reasoning: 'r',
+      source: 'llm',
+    });
     await inFlight;
     expect(categorizationService.isRunning()).toBe(false);
   });
@@ -332,14 +361,18 @@ describe('word lists', () => {
   });
 
   it('explains what a title would match', async () => {
-    const res = await request(app).post('/api/wordlists/test').send({ title: 'Tankstellenrechnung' });
+    const res = await request(app)
+      .post('/api/wordlists/test')
+      .send({ title: 'Tankstellenrechnung' });
     expect(res.status).toBe(200);
     expect(res.body.match).toBeNull(); // no Gas/Fuel category in the mock set
     expect(res.body.normalized).toBe('tankstellenrechnung');
   });
 
   it('adds and removes a keyword', async () => {
-    const add = await request(app).post('/api/wordlists/liquor/keywords').send({ keyword: 'Spätkauf' });
+    const add = await request(app)
+      .post('/api/wordlists/liquor/keywords')
+      .send({ keyword: 'Spätkauf' });
     expect(add.status).toBe(200);
     expect(add.body.keyword).toBe('spaetkauf');
 
@@ -348,7 +381,9 @@ describe('word lists', () => {
   });
 
   it('rejects a duplicate keyword with 409', async () => {
-    const res = await request(app).post('/api/wordlists/liquor/keywords').send({ keyword: 'kneipe' });
+    const res = await request(app)
+      .post('/api/wordlists/liquor/keywords')
+      .send({ keyword: 'kneipe' });
     expect(res.status).toBe(409);
   });
 
@@ -359,7 +394,9 @@ describe('word lists', () => {
 });
 
 describe('prompt template', () => {
-  afterEach(async () => { await request(app).delete('/api/prompt/template'); });
+  afterEach(async () => {
+    await request(app).delete('/api/prompt/template');
+  });
 
   it('returns the built-in template by default', async () => {
     const res = await request(app).get('/api/prompt/template');
@@ -369,7 +406,9 @@ describe('prompt template', () => {
   });
 
   it('persists a custom template', async () => {
-    const save = await request(app).post('/api/prompt/template').send({ template: 'A {{title}} B {{categories}}' });
+    const save = await request(app)
+      .post('/api/prompt/template')
+      .send({ template: 'A {{title}} B {{categories}}' });
     expect(save.status).toBe(200);
 
     const read = await request(app).get('/api/prompt/template');

@@ -77,9 +77,7 @@ describe('word-list matching: German compounds', () => {
   it('refuses tail matching for keywords below the safe length', () => {
     // "regal" is long enough to match a compound head but not a tail, which is
     // what keeps "Portugal" out of the furniture category.
-    expect(wordLists.COMPOUND_SUFFIX_MIN_LENGTH).toBeGreaterThan(
-      wordLists.COMPOUND_MIN_LENGTH
-    );
+    expect(wordLists.COMPOUND_SUFFIX_MIN_LENGTH).toBeGreaterThan(wordLists.COMPOUND_MIN_LENGTH);
     expect(match('Portugal Reise')).toBeNull();
   });
 });

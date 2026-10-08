@@ -36,7 +36,10 @@ function fmtDateTime(value) {
   const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -69,7 +72,10 @@ function statusBadge(status) {
 
 function sourceBadge(source) {
   if (!source) return '';
-  const label = { wordlist: 'word list', llm: 'LLM', 'llm+wordlist': 'LLM + word list', manual: 'you' }[source] || source;
+  const label =
+    { wordlist: 'word list', llm: 'LLM', 'llm+wordlist': 'LLM + word list', manual: 'you' }[
+      source
+    ] || source;
   return `<span class="badge badge-neutral">${esc(label)}</span>`;
 }
 
@@ -303,8 +309,9 @@ async function loadDashboard() {
     // Database
     const dbOk = health.database && health.database.ok;
     setStatus('status-db', dbOk ? '✔ Connected' : '✘ Disconnected', dbOk ? 'ok' : 'error');
-    document.getElementById('status-db-note').textContent =
-      dbOk ? '' : (health.database && health.database.error) || '';
+    document.getElementById('status-db-note').textContent = dbOk
+      ? ''
+      : (health.database && health.database.error) || '';
 
     // Ollama — a reachable server without the configured model is still broken.
     const ollama = health.ollama || {};
@@ -381,7 +388,10 @@ function renderLastRun(lastRun) {
     ['Finished', fmtDateTime(lastRun.finishedAt)],
   ];
   document.getElementById('last-run-stats').innerHTML = cells
-    .map(([k, v]) => `<div><span class="k">${esc(k)}</span><span class="v">${esc(v ?? '—')}</span></div>`)
+    .map(
+      ([k, v]) =>
+        `<div><span class="k">${esc(k)}</span><span class="v">${esc(v ?? '—')}</span></div>`
+    )
     .join('');
 }
 
@@ -452,9 +462,9 @@ document.getElementById('uncategorized-tbody').addEventListener('click', async (
   });
 });
 
-document.getElementById('btn-refresh-dashboard').addEventListener('click', (e) =>
-  withButton(e.currentTarget, '↻ …', loadDashboard)
-);
+document
+  .getElementById('btn-refresh-dashboard')
+  .addEventListener('click', (e) => withButton(e.currentTarget, '↻ …', loadDashboard));
 
 document.getElementById('btn-run-batch').addEventListener('click', (e) =>
   withButton(e.currentTarget, '⏳ Running…', async () => {
@@ -501,7 +511,9 @@ function updateSuggestEnabled() {
   document.getElementById('btn-pg-suggest').disabled = !ready;
 }
 
-document.getElementById('tab-existing').addEventListener('click', () => setPlaygroundMode('existing'));
+document
+  .getElementById('tab-existing')
+  .addEventListener('click', () => setPlaygroundMode('existing'));
 document.getElementById('tab-adhoc').addEventListener('click', () => setPlaygroundMode('adhoc'));
 document.getElementById('pg-title').addEventListener('input', updateSuggestEnabled);
 
@@ -563,7 +575,10 @@ function renderSuggestion(res) {
   lastSuggestion = res.suggestion;
 
   document.getElementById('pg-expense-title').textContent = res.expense.title;
-  document.getElementById('pg-expense-amount').textContent = fmt(res.expense.amount, res.expense.currency);
+  document.getElementById('pg-expense-amount').textContent = fmt(
+    res.expense.amount,
+    res.expense.currency
+  );
   document.getElementById('pg-cat-name').textContent =
     res.suggestion.categoryName || `ID ${res.suggestion.categoryId}`;
   document.getElementById('pg-confidence').innerHTML =
@@ -589,7 +604,9 @@ function renderWordListExplanation(explanation) {
     return;
   }
 
-  const parts = [`<p class="muted">Normalized: <code>${esc(explanation.normalized || '—')}</code></p>`];
+  const parts = [
+    `<p class="muted">Normalized: <code>${esc(explanation.normalized || '—')}</code></p>`,
+  ];
 
   if (explanation.ambiguous) {
     parts.push(
@@ -702,13 +719,12 @@ function renderHistoryStats(stats = {}) {
   const viaWordList = stats.viaWordList ?? 0;
   const viaLlm = stats.viaLlm ?? 0;
   document.getElementById('hist-source-note').textContent =
-    viaWordList + viaLlm > 0
-      ? `${viaWordList} by word list, ${viaLlm} by LLM`
-      : '';
+    viaWordList + viaLlm > 0 ? `${viaWordList} by word list, ${viaLlm} by LLM` : '';
   document.getElementById('hist-parked-note').textContent =
     stats.parked > 0 ? `${stats.parked} parked` : '';
-  document.getElementById('hist-speed-note').textContent =
-    stats.avgLlmMs ? `LLM averages ${fmtDuration(stats.avgLlmMs)}` : '';
+  document.getElementById('hist-speed-note').textContent = stats.avgLlmMs
+    ? `LLM averages ${fmtDuration(stats.avgLlmMs)}`
+    : '';
 }
 
 function renderHistoryRows(rows) {
@@ -862,9 +878,9 @@ document.getElementById('history-next').addEventListener('click', () => {
   loadHistory();
 });
 
-document.getElementById('btn-history-refresh').addEventListener('click', (e) =>
-  withButton(e.currentTarget, '↻ …', loadHistory)
-);
+document
+  .getElementById('btn-history-refresh')
+  .addEventListener('click', (e) => withButton(e.currentTarget, '↻ …', loadHistory));
 
 document.getElementById('btn-history-clear').addEventListener('click', async (e) => {
   if (!confirm('Delete the entire processing history? This cannot be undone.')) return;
@@ -927,15 +943,16 @@ function renderSettingsForm(payload) {
   const groups = {};
   for (const field of fields) (groups[field.group] ||= []).push(field);
 
-  form.innerHTML = Object.entries(groups)
-    .map(
-      ([group, items]) => `
+  form.innerHTML =
+    Object.entries(groups)
+      .map(
+        ([group, items]) => `
       <div class="settings-section">
         <h2>${esc(GROUP_TITLES[group] || group)}</h2>
         ${items.map(renderSettingField).join('')}
       </div>`
-    )
-    .join('') +
+      )
+      .join('') +
     `<div class="settings-section">
        <h2>Read-only</h2>
        <p class="section-desc">Set from the environment at startup; a restart is needed to change these.</p>
@@ -1031,9 +1048,7 @@ document.getElementById('btn-settings-save').addEventListener('click', (e) =>
         body: Object.fromEntries(pendingSettings),
       });
       toast(
-        res.changed.length
-          ? `Saved ${res.changed.length} setting(s).`
-          : 'Nothing changed.',
+        res.changed.length ? `Saved ${res.changed.length} setting(s).` : 'Nothing changed.',
         'success'
       );
       await loadSettings();
@@ -1223,12 +1238,14 @@ function renderKeywords(listName) {
     .join('');
 
   if (data.removedKeywords && data.removedKeywords.length) {
-    document.getElementById('keyword-list').insertAdjacentHTML(
-      'beforeend',
-      `<span class="muted" style="width:100%">Removed built-ins (kept out after restart): ${esc(
-        data.removedKeywords.join(', ')
-      )}</span>`
-    );
+    document
+      .getElementById('keyword-list')
+      .insertAdjacentHTML(
+        'beforeend',
+        `<span class="muted" style="width:100%">Removed built-ins (kept out after restart): ${esc(
+          data.removedKeywords.join(', ')
+        )}</span>`
+      );
   }
 
   document.getElementById('wordlist-content').classList.remove('hidden');
@@ -1279,9 +1296,9 @@ async function addKeyword() {
   }
 }
 
-document.getElementById('btn-add-keyword').addEventListener('click', (e) =>
-  withButton(e.currentTarget, '…', addKeyword)
-);
+document
+  .getElementById('btn-add-keyword')
+  .addEventListener('click', (e) => withButton(e.currentTarget, '…', addKeyword));
 
 document.getElementById('new-keyword').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -1317,7 +1334,8 @@ async function testWordList() {
         (res.ambiguousBetween || []).join(' vs ')
       )} — the LLM would decide.`;
     } else if (res.match) {
-      verdict = `<span class="badge badge-high">${esc(res.match.categoryName)}</span> via ` +
+      verdict =
+        `<span class="badge badge-high">${esc(res.match.categoryName)}</span> via ` +
         `<code>${esc(res.match.keyword)}</code> (${esc(res.match.kind)}, ` +
         `${Math.round(res.match.confidence * 100)}% confidence)`;
     } else {
@@ -1329,9 +1347,9 @@ async function testWordList() {
   }
 }
 
-document.getElementById('btn-wordlist-test').addEventListener('click', (e) =>
-  withButton(e.currentTarget, '…', testWordList)
-);
+document
+  .getElementById('btn-wordlist-test')
+  .addEventListener('click', (e) => withButton(e.currentTarget, '…', testWordList));
 
 document.getElementById('wordlist-test-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {

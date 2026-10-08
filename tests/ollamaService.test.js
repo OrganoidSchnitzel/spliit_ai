@@ -50,7 +50,13 @@ afterEach(() => {
 });
 
 describe('ollamaService.buildPrompt', () => {
-  const baseExpense = { id: 'exp-1', title: 'Lidl groceries', amount: 4250, currency: 'EUR', notes: null };
+  const baseExpense = {
+    id: 'exp-1',
+    title: 'Lidl groceries',
+    amount: 4250,
+    currency: 'EUR',
+    notes: null,
+  };
 
   it('includes the expense title', () => {
     expect(buildPrompt(baseExpense, CATEGORIES)).toContain('Lidl groceries');
@@ -96,7 +102,9 @@ describe('ollamaService.buildPrompt', () => {
 
   it('uses a persisted custom template when one is set', () => {
     settingsStore.setMany({ 'ollama.customPromptTemplate': 'X {{title}} Y {{categories}}' });
-    expect(buildPrompt(baseExpense, CATEGORIES)).toBe('X Lidl groceries Y 1:Groceries|2:Restaurants|3:Fuel|4:Public Transit|5:Movies');
+    expect(buildPrompt(baseExpense, CATEGORIES)).toBe(
+      'X Lidl groceries Y 1:Groceries|2:Restaurants|3:Fuel|4:Public Transit|5:Movies'
+    );
   });
 });
 
@@ -106,11 +114,15 @@ describe('ollamaService.validatePromptTemplate', () => {
   });
 
   it('rejects a template missing required placeholders', () => {
-    expect(() => validatePromptTemplate('no placeholders')).toThrow(/missing required placeholder/i);
+    expect(() => validatePromptTemplate('no placeholders')).toThrow(
+      /missing required placeholder/i
+    );
   });
 
   it('rejects a template using an unknown placeholder', () => {
-    expect(() => validatePromptTemplate('{{title}} {{categories}} {{bogus}}')).toThrow(/unknown placeholder/i);
+    expect(() => validatePromptTemplate('{{title}} {{categories}} {{bogus}}')).toThrow(
+      /unknown placeholder/i
+    );
   });
 
   it('rejects an empty template', () => {
@@ -142,11 +154,16 @@ describe('ollamaService.suggestCategory — request shape', () => {
   it('retries a transient failure and then succeeds', async () => {
     const err = new Error('socket hang up');
     err.code = 'ECONNRESET';
-    mockPost
-      .mockRejectedValueOnce(err)
-      .mockResolvedValueOnce({
-        data: { response: JSON.stringify({ categoryId: 1, categoryName: 'Groceries', confidence: 0.8, reasoning: 'r' }) },
-      });
+    mockPost.mockRejectedValueOnce(err).mockResolvedValueOnce({
+      data: {
+        response: JSON.stringify({
+          categoryId: 1,
+          categoryName: 'Groceries',
+          confidence: 0.8,
+          reasoning: 'r',
+        }),
+      },
+    });
 
     const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES);
     expect(res.categoryId).toBe(1);
@@ -158,9 +175,9 @@ describe('ollamaService.suggestCategory — request shape', () => {
     err.response = { status: 400, data: { error: 'model not found' } };
     mockPost.mockRejectedValue(err);
 
-    await expect(suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES)).rejects.toThrow(
-      /model not found/
-    );
+    await expect(
+      suggestCategory({ title: NEUTRAL_TITLE, amount: 100 }, CATEGORIES)
+    ).rejects.toThrow(/model not found/);
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 });
@@ -169,13 +186,21 @@ describe('ollamaService.suggestCategory — response handling', () => {
   it('returns a parsed suggestion', async () => {
     respond({ categoryId: 3, categoryName: 'Fuel', confidence: 0.82, reasoning: 'fuel stop' });
     const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 5000 }, CATEGORIES);
-    expect(res).toMatchObject({ categoryId: 3, categoryName: 'Fuel', confidence: 0.82, source: 'llm' });
+    expect(res).toMatchObject({
+      categoryId: 3,
+      categoryName: 'Fuel',
+      confidence: 0.82,
+      source: 'llm',
+    });
     expect(typeof res.durationMs).toBe('number');
   });
 
   it('parses JSON out of markdown and conversational wrapping', async () => {
     mockPost.mockResolvedValue({
-      data: { response: 'Sure!\n```json\n{"categoryId":1,"categoryName":"Groceries","confidence":0.7,"reasoning":"r"}\n```' },
+      data: {
+        response:
+          'Sure!\n```json\n{"categoryId":1,"categoryName":"Groceries","confidence":0.7,"reasoning":"r"}\n```',
+      },
     });
     const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES);
     expect(res.categoryId).toBe(1);
@@ -183,7 +208,10 @@ describe('ollamaService.suggestCategory — response handling', () => {
 
   it('parses JSON when the model emits a <think> wrapper first', async () => {
     mockPost.mockResolvedValue({
-      data: { response: '<think>hmm</think>{"categoryId":1,"categoryName":"Groceries","confidence":0.77,"reasoning":"r"}' },
+      data: {
+        response:
+          '<think>hmm</think>{"categoryId":1,"categoryName":"Groceries","confidence":0.77,"reasoning":"r"}',
+      },
     });
     const res = await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES);
     expect(res.confidence).toBe(0.77);
@@ -191,9 +219,15 @@ describe('ollamaService.suggestCategory — response handling', () => {
 
   it('reads chat-style message.content responses', async () => {
     mockPost.mockResolvedValue({
-      data: { message: { content: '{"categoryId":2,"categoryName":"Restaurants","confidence":0.6,"reasoning":"r"}' } },
+      data: {
+        message: {
+          content: '{"categoryId":2,"categoryName":"Restaurants","confidence":0.6,"reasoning":"r"}',
+        },
+      },
     });
-    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(2);
+    expect(
+      (await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId
+    ).toBe(2);
   });
 
   it('tolerates extra keys instead of failing the whole expense', async () => {
@@ -204,17 +238,23 @@ describe('ollamaService.suggestCategory — response handling', () => {
       reasoning: 'r',
       explanation: 'an extra field some models add',
     });
-    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(1);
+    expect(
+      (await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId
+    ).toBe(1);
   });
 
   it('repairs a mismatched categoryId by trusting a valid categoryName', async () => {
     respond({ categoryId: 99, categoryName: 'Groceries', confidence: 0.9, reasoning: 'r' });
-    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId).toBe(1);
+    expect(
+      (await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryId
+    ).toBe(1);
   });
 
   it('repairs a mismatched categoryName by trusting a valid categoryId', async () => {
     respond({ categoryId: 2, categoryName: 'Not A Category', confidence: 0.9, reasoning: 'r' });
-    expect((await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryName).toBe('Restaurants');
+    expect(
+      (await suggestCategory({ title: NEUTRAL_TITLE, amount: 1 }, CATEGORIES)).categoryName
+    ).toBe('Restaurants');
   });
 
   it('rejects a response where neither id nor name is valid', async () => {
@@ -259,7 +299,12 @@ describe('ollamaService.suggestCategory — word lists', () => {
 });
 
 describe('ollamaService.applyWordListGuard', () => {
-  const suggestion = { categoryId: 5, categoryName: 'Movies', confidence: 0.8, reasoning: 'model guess' };
+  const suggestion = {
+    categoryId: 5,
+    categoryName: 'Movies',
+    confidence: 0.8,
+    reasoning: 'model guess',
+  };
 
   it('remaps a suggestion the word lists disagree with', () => {
     const out = applyWordListGuard({ title: 'Rewe Wocheneinkauf' }, suggestion, CATEGORIES);
@@ -268,7 +313,11 @@ describe('ollamaService.applyWordListGuard', () => {
   });
 
   it('never claims more confidence than the weaker of the two sources', () => {
-    const out = applyWordListGuard({ title: 'Rewe Wocheneinkauf' }, { ...suggestion, confidence: 0.99 }, CATEGORIES);
+    const out = applyWordListGuard(
+      { title: 'Rewe Wocheneinkauf' },
+      { ...suggestion, confidence: 0.99 },
+      CATEGORIES
+    );
     expect(out.confidence).toBeLessThanOrEqual(0.99);
   });
 
@@ -278,7 +327,9 @@ describe('ollamaService.applyWordListGuard', () => {
   });
 
   it('leaves the suggestion alone when no keyword matches', () => {
-    expect(applyWordListGuard({ title: NEUTRAL_TITLE }, suggestion, CATEGORIES)).toEqual(suggestion);
+    expect(applyWordListGuard({ title: NEUTRAL_TITLE }, suggestion, CATEGORIES)).toEqual(
+      suggestion
+    );
   });
 });
 
@@ -299,7 +350,12 @@ describe('ollamaService.applyTitleSemanticGuard', () => {
   });
 
   it('keeps confidence when the category is already home-like', () => {
-    const suggestion = { categoryId: 7, categoryName: 'Furniture', confidence: 0.9, reasoning: 'r' };
+    const suggestion = {
+      categoryId: 7,
+      categoryName: 'Furniture',
+      confidence: 0.9,
+      reasoning: 'r',
+    };
     const out = applyTitleSemanticGuard({ title: 'Schrank' }, suggestion, [
       { id: 7, grouping: 'Home', name: 'Furniture' },
     ]);
@@ -307,18 +363,32 @@ describe('ollamaService.applyTitleSemanticGuard', () => {
   });
 
   it('ignores titles that are not furniture-like', () => {
-    const suggestion = { categoryId: 5, categoryName: 'Entertainment', confidence: 0.9, reasoning: 'r' };
-    expect(applyTitleSemanticGuard({ title: NEUTRAL_TITLE }, suggestion, furnitureCategories)).toEqual(suggestion);
+    const suggestion = {
+      categoryId: 5,
+      categoryName: 'Entertainment',
+      confidence: 0.9,
+      reasoning: 'r',
+    };
+    expect(
+      applyTitleSemanticGuard({ title: NEUTRAL_TITLE }, suggestion, furnitureCategories)
+    ).toEqual(suggestion);
   });
 });
 
 describe('ollamaService.parseModelPayload', () => {
   it('names the missing keys rather than failing opaquely', () => {
-    expect(() => parseModelPayload('{"categoryId":1}')).toThrow(/Missing key\(s\): categoryName, confidence, reasoning/);
+    expect(() => parseModelPayload('{"categoryId":1}')).toThrow(
+      /Missing key\(s\): categoryName, confidence, reasoning/
+    );
   });
 
   it('unwraps a doubly-encoded JSON string', () => {
-    const inner = JSON.stringify({ categoryId: 1, categoryName: 'Groceries', confidence: 0.5, reasoning: 'r' });
+    const inner = JSON.stringify({
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.5,
+      reasoning: 'r',
+    });
     expect(parseModelPayload(JSON.stringify(inner)).categoryId).toBe(1);
   });
 });

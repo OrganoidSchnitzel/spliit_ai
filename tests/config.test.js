@@ -35,7 +35,9 @@ describe('config validation', () => {
   });
 
   it('strips a trailing slash from the Ollama URL', () => {
-    expect(build({ OLLAMA_BASE_URL: 'http://ollama:11434/' }).ollama.baseUrl).toBe('http://ollama:11434');
+    expect(build({ OLLAMA_BASE_URL: 'http://ollama:11434/' }).ollama.baseUrl).toBe(
+      'http://ollama:11434'
+    );
   });
 
   it('reports every problem at once rather than one per restart', () => {
@@ -50,7 +52,9 @@ describe('config validation', () => {
   });
 
   it('parses the retry backoff into an ascending list of hours', () => {
-    expect(build({ RETRY_BACKOFF_HOURS: '0.5, 2, 12' }).processing.retryBackoffHours).toEqual([0.5, 2, 12]);
+    expect(build({ RETRY_BACKOFF_HOURS: '0.5, 2, 12' }).processing.retryBackoffHours).toEqual([
+      0.5, 2, 12,
+    ]);
   });
 
   it('defaults keep_alive above the default scheduler interval', () => {
@@ -64,9 +68,16 @@ describe('empty environment variables', () => {
   // validation error stopped containers from starting after an upgrade, with
   // no configuration change on the user's side.
   const NUMERIC = [
-    'PORT', 'DB_PORT', 'CONFIDENCE_THRESHOLD', 'BATCH_SIZE', 'OLLAMA_TIMEOUT_MS',
-    'OLLAMA_TEMPERATURE', 'OLLAMA_NUM_PREDICT', 'OLLAMA_NUM_CTX',
-    'OLLAMA_MAX_RETRIES', 'HISTORY_RETENTION_DAYS',
+    'PORT',
+    'DB_PORT',
+    'CONFIDENCE_THRESHOLD',
+    'BATCH_SIZE',
+    'OLLAMA_TIMEOUT_MS',
+    'OLLAMA_TEMPERATURE',
+    'OLLAMA_NUM_PREDICT',
+    'OLLAMA_NUM_CTX',
+    'OLLAMA_MAX_RETRIES',
+    'HISTORY_RETENTION_DAYS',
   ];
 
   it.each(NUMERIC)('treats %s="" as unset', (name) => {
@@ -83,9 +94,21 @@ describe('empty environment variables', () => {
 
   it('starts with every optional variable empty at once', () => {
     const env = Object.fromEntries(
-      [...NUMERIC, 'OLLAMA_BASE_URL', 'OLLAMA_MODEL', 'SCHEDULER_CRON', 'DB_HOST',
-       'LOG_LEVEL', 'DRY_RUN', 'SCHEDULER_ENABLED', 'API_TOKEN', 'OLLAMA_KEEP_ALIVE',
-       'RETRY_BACKOFF_HOURS', 'DB_SSL', 'WORDLISTS_ENABLED'].map((k) => [k, ''])
+      [
+        ...NUMERIC,
+        'OLLAMA_BASE_URL',
+        'OLLAMA_MODEL',
+        'SCHEDULER_CRON',
+        'DB_HOST',
+        'LOG_LEVEL',
+        'DRY_RUN',
+        'SCHEDULER_ENABLED',
+        'API_TOKEN',
+        'OLLAMA_KEEP_ALIVE',
+        'RETRY_BACKOFF_HOURS',
+        'DB_SSL',
+        'WORDLISTS_ENABLED',
+      ].map((k) => [k, ''])
     );
     const cfg = build(env);
     expect(cfg.port).toBe(3000);

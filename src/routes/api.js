@@ -18,8 +18,7 @@ const router = express.Router();
  * instead of hanging the request. Every route below used to repeat the same
  * try/catch to do this.
  */
-const wrap = (handler) => (req, res, next) =>
-  Promise.resolve(handler(req, res, next)).catch(next);
+const wrap = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 /** Throw a 4xx that the error middleware will render as JSON. */
 function fail(status, message) {
@@ -235,7 +234,9 @@ router.post(
       dryRun: body.dryRun === true ? true : undefined,
     });
     if (stats.skipped) {
-      return res.status(409).json({ ok: false, error: 'A batch run is already in progress', stats });
+      return res
+        .status(409)
+        .json({ ok: false, error: 'A batch run is already in progress', stats });
     }
     res.json({ ok: true, stats });
   })
@@ -336,14 +337,24 @@ router.patch('/settings', (req, res) => {
 router.delete('/settings/:key', (req, res) => {
   const reverted = settingsStore.reset(req.params.key);
   if (reverted && settingsStore.SCHEMA[req.params.key].restart) scheduler.reload();
-  res.json({ ok: true, reverted, settings: settingsStore.getAll(), schema: settingsStore.describe() });
+  res.json({
+    ok: true,
+    reverted,
+    settings: settingsStore.getAll(),
+    schema: settingsStore.describe(),
+  });
 });
 
 /** DELETE /api/settings — revert everything. */
 router.delete('/settings', (_req, res) => {
   const reverted = settingsStore.resetAll();
   if (reverted.some((key) => settingsStore.SCHEMA[key].restart)) scheduler.reload();
-  res.json({ ok: true, reverted, settings: settingsStore.getAll(), schema: settingsStore.describe() });
+  res.json({
+    ok: true,
+    reverted,
+    settings: settingsStore.getAll(),
+    schema: settingsStore.describe(),
+  });
 });
 
 /** GET /api/models — which models Ollama actually has pulled. */

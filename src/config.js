@@ -48,7 +48,9 @@ function parseBoolean(name, raw, fallback) {
 }
 
 function parseUrl(name, raw, fallback) {
-  const value = String(raw ?? fallback).trim().replace(/\/+$/, '');
+  const value = String(raw ?? fallback)
+    .trim()
+    .replace(/\/+$/, '');
   try {
     const parsed = new URL(value);
     if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -145,7 +147,12 @@ function build(env) {
     // Ollama (local LLM)
     ollama: {
       baseUrl: attempt(
-        () => parseUrl('OLLAMA_BASE_URL', get('OLLAMA_BASE_URL', 'http://localhost:11434'), 'http://localhost:11434'),
+        () =>
+          parseUrl(
+            'OLLAMA_BASE_URL',
+            get('OLLAMA_BASE_URL', 'http://localhost:11434'),
+            'http://localhost:11434'
+          ),
         'http://localhost:11434'
       ),
       model: get('OLLAMA_MODEL', 'llama3.2'),

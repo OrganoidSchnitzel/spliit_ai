@@ -41,7 +41,9 @@ describe('data directory and upgrade path', () => {
         provider TEXT, processed_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`);
     legacy
-      .prepare('INSERT INTO history (expense_id,title,amount,status,category_name) VALUES (?,?,?,?,?)')
+      .prepare(
+        'INSERT INTO history (expense_id,title,amount,status,category_name) VALUES (?,?,?,?,?)'
+      )
       .run('e1', 'Alte Buchung', 999, 'applied', 'Groceries');
     legacy.close();
   }
@@ -64,7 +66,11 @@ describe('data directory and upgrade path', () => {
     require('../src/settingsStore').init();
     require('../src/services/historyService').init();
 
-    const columns = localDb.get().prepare('PRAGMA table_info(history)').all().map((c) => c.name);
+    const columns = localDb
+      .get()
+      .prepare('PRAGMA table_info(history)')
+      .all()
+      .map((c) => c.name);
     expect(columns).toEqual(expect.arrayContaining(['source', 'duration_ms', 'parked']));
   });
 
