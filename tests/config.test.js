@@ -101,3 +101,30 @@ describe('empty environment variables', () => {
     expect(() => build({ CONFIDENCE_THRESHOLD: '9' })).toThrow(/out of range/);
   });
 });
+
+describe('trust proxy', () => {
+  const { build } = require('../src/config');
+
+  it('does not trust proxy headers by default', () => {
+    // Trusting X-Forwarded-For on a directly-exposed port lets any client
+    // claim any IP and walk past the rate limiter.
+    expect(build({}).trustProxy).toBe(false);
+  });
+
+  it('accepts a hop count', () => {
+    expect(build({ TRUST_PROXY: '2' }).trustProxy).toBe(2);
+  });
+
+  it('maps true to a single hop', () => {
+    expect(build({ TRUST_PROXY: 'true' }).trustProxy).toBe(1);
+  });
+
+  it('passes through a named setting such as loopback', () => {
+    expect(build({ TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
+  });
+
+  it('treats off-ish values as disabled', () => {
+    expect(build({ TRUST_PROXY: 'off' }).trustProxy).toBe(false);
+    expect(build({ TRUST_PROXY: '' }).trustProxy).toBe(false);
+  });
+});

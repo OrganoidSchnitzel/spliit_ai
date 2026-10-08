@@ -1,3 +1,12 @@
+> **Archived — historical design notes, not current documentation.**
+>
+> This was written *before* Spliit AI was implemented. It describes a planned
+> multi-provider architecture (`aiServiceFactory`, `AI_PROVIDER`, `OPENAI_API_KEY`)
+> that was removed in #1 and has not existed for a long time. It is kept only
+> as a record of the original design thinking.
+>
+> For how the app actually works, see the [README](../../README.md).
+
 # PROJECT ANALYSIS: Spliit & Paperless-AI Integration Guide
 
 ## 1. SPLIIT - BILL SPLITTING WEB APP

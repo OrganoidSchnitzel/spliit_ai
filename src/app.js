@@ -35,7 +35,13 @@ function init() {
 }
 
 const app = express();
-app.set('trust proxy', 1);
+
+// Only believe X-Forwarded-For when the deployment actually has a proxy in
+// front. Trusting it unconditionally means a client reaching the port directly
+// can spoof its address and bypass the rate limiter entirely.
+if (config.trustProxy !== false) {
+  app.set('trust proxy', config.trustProxy);
+}
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────
 const limiter = rateLimit({

@@ -32,10 +32,20 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 - **REST API** – trigger runs, get suggestions, or apply categories programmatically.
   Optional shared-secret authentication.
 - **Docker-ready** – a `Dockerfile` and `docker-compose.yml` are included.
-- **Unraid-ready** – see [UNRAID_SETUP.md](UNRAID_SETUP.md) for step-by-step instructions.
+- **Unraid-ready** – see [docs/unraid.md](docs/unraid.md) for step-by-step instructions.
 
 > See [CHANGELOG.md](CHANGELOG.md) for what changed in v1.1, and
 > [ANALYSIS.md](ANALYSIS.md) for the review that drove it.
+
+### Documentation
+
+| | |
+|---|---|
+| [docs/unraid.md](docs/unraid.md) | Step-by-step Unraid setup |
+| [docs/optimization.md](docs/optimization.md) | Model choice and tuning for low-power hardware |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, and why |
+| [ANALYSIS.md](ANALYSIS.md) | The code review that drove the 1.1 rewrite |
+| [docs/archive/](docs/archive) | Pre-implementation design notes, kept for history only |
 
 ---
 
@@ -137,7 +147,7 @@ docker compose up -d
 
 ## Unraid Installation
 
-For a full step-by-step guide to running Spliit AI on an Unraid server (including finding your Spliit network, building the image, volume mounts, and Ollama GPU setup), see **[UNRAID_SETUP.md](UNRAID_SETUP.md)**.
+For a full step-by-step guide to running Spliit AI on an Unraid server (including finding your Spliit network, building the image, volume mounts, and Ollama GPU setup), see **[docs/unraid.md](docs/unraid.md)**.
 
 ---
 

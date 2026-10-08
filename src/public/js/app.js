@@ -228,7 +228,7 @@ async function ensureCategories(force = false) {
 }
 
 /**
- * A category <select>, always led by a placeholder.
+ * Every option for a category <select>, led by a placeholder.
  *
  * Without the placeholder the browser pre-selects the first category, so
  * clicking Apply on a row with no suggestion silently assigns whatever sorts
@@ -244,6 +244,45 @@ function categoryOptions(selectedId) {
     .join('');
   const placeholderSelected = selectedId == null ? ' selected' : '';
   return `<option value=""${placeholderSelected}>— pick a category —</option>${options}`;
+}
+
+/**
+ * The collapsed state of a row's category <select>: the placeholder plus, if
+ * the row already has a category, just that one option so the closed control
+ * still reads correctly.
+ *
+ * A table row carries a full category list only once the user actually opens
+ * it. Spliit ships 44 categories, so a 100-row history page was rebuilding
+ * 4,400 <option> nodes on every render — and the table re-renders after every
+ * Apply. This keeps it to one or two per row until needed, which matters on
+ * the low-power hardware this is aimed at.
+ */
+function lazyCategoryOptions(selectedId) {
+  const selected = allCategories.find((c) => Number(c.id) === Number(selectedId));
+  const placeholder = `<option value=""${selected ? '' : ' selected'}>— pick a category —</option>`;
+  if (!selected) return placeholder;
+  return (
+    placeholder +
+    `<option value="${esc(selected.id)}" selected>[${esc(selected.grouping)}] ${esc(selected.name)}</option>`
+  );
+}
+
+/** Fill a lazily-rendered select with the full list, keeping its selection. */
+function expandCategorySelect(select) {
+  if (select.dataset.expanded === '1') return;
+  const current = select.value;
+  select.innerHTML = categoryOptions(current || null);
+  select.value = current;
+  select.dataset.expanded = '1';
+}
+
+// Expand on the first interaction with any row-level category select. focusin
+// covers keyboard users; mousedown fires before the dropdown opens.
+for (const event of ['focusin', 'mousedown']) {
+  document.addEventListener(event, (e) => {
+    const select = e.target.closest && e.target.closest('.js-lazy-categories');
+    if (select) expandCategorySelect(select);
+  });
 }
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
@@ -363,8 +402,8 @@ function renderUncategorized(expenses) {
         <td class="num">${esc(fmt(e.amount, e.currency))}</td>
         <td>
           <div class="row-action">
-            <select class="form-control js-inline-category" aria-label="Category for ${esc(e.title)}">
-              ${categoryOptions(null)}
+            <select class="form-control js-inline-category js-lazy-categories" aria-label="Category for ${esc(e.title)}">
+              ${lazyCategoryOptions(null)}
             </select>
             <button class="btn btn-sm btn-success js-inline-apply" data-expense-id="${esc(e.id)}">Apply</button>
             <button class="btn btn-sm btn-ghost js-playground-for" data-expense-id="${esc(e.id)}" title="Open in playground">🔮</button>
@@ -687,8 +726,8 @@ function renderHistoryRows(rows) {
       // than one history row, which happens on every retry.
       const action = r.expense_id
         ? `<div class="row-action">
-             <select class="form-control js-history-category" aria-label="Correct category for ${esc(r.title)}">
-               ${categoryOptions(r.category_id)}
+             <select class="form-control js-history-category js-lazy-categories" aria-label="Correct category for ${esc(r.title)}">
+               ${lazyCategoryOptions(r.category_id)}
              </select>
              <button class="btn btn-sm btn-success js-history-apply" data-expense-id="${esc(r.expense_id)}"
                      data-was="${esc(r.category_name || '')}">Apply</button>

@@ -293,7 +293,11 @@ CONFIDENCE_THRESHOLD=0.55
 ### How It Works
 
 1. **Expense received** → Check title against word lists
-2. **Match found** → Return category immediately (0.95 confidence)
+2. **Match found** → Return category immediately. Confidence reflects match
+   quality: 0.95 for a multi-word phrase, 0.93 for a whole word of 5+
+   characters, 0.90 for a German compound, down to 0.80 for a short token.
+   If two lists match equally well the result is discarded as ambiguous and
+   the LLM decides.
 3. **No match** → Fall back to LLM inference
 
 ### Managing Word Lists
@@ -519,4 +523,4 @@ For issues or questions:
 ---
 
 **Last Updated**: March 2026
-**Version**: 1.0.0
+**Applies to**: Spliit AI 1.1 and later

@@ -106,6 +106,20 @@ function build(env) {
     // `X-Api-Token` or `Authorization: Bearer <token>`.
     apiToken: read(env, 'API_TOKEN') || null,
 
+    // Whether to believe X-Forwarded-For. Off by default: when the port is
+    // reached directly, trusting that header lets any client claim any IP and
+    // walk straight past the rate limiter. Set this only when something you
+    // control actually sits in front (a hop count, or 'loopback').
+    trustProxy: (() => {
+      const raw = read(env, 'TRUST_PROXY');
+      if (raw === undefined) return false;
+      const lowered = raw.toLowerCase();
+      if (['false', '0', 'no', 'off'].includes(lowered)) return false;
+      if (['true', 'yes', 'on'].includes(lowered)) return 1;
+      if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+      return raw; // 'loopback', a subnet, a comma-separated list
+    })(),
+
     logLevel: (() => {
       const raw = get('LOG_LEVEL', 'info').toLowerCase();
       if (!LOG_LEVELS.includes(raw)) {
