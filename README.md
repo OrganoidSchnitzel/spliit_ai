@@ -39,13 +39,12 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 
 ### Documentation
 
-|                                              |                                                        |
-| -------------------------------------------- | ------------------------------------------------------ |
-| [docs/unraid.md](docs/unraid.md)             | Step-by-step Unraid setup                              |
-| [docs/optimization.md](docs/optimization.md) | Model choice and tuning for low-power hardware         |
-| [CHANGELOG.md](CHANGELOG.md)                 | What changed, and why                                  |
-| [ANALYSIS.md](ANALYSIS.md)                   | The code review that drove the 1.1 rewrite             |
-| [docs/archive/](docs/archive)                | Pre-implementation design notes, kept for history only |
+|                                              |                                                |
+| -------------------------------------------- | ---------------------------------------------- |
+| [docs/unraid.md](docs/unraid.md)             | Step-by-step Unraid setup                      |
+| [docs/optimization.md](docs/optimization.md) | Model choice and tuning for low-power hardware |
+| [CHANGELOG.md](CHANGELOG.md)                 | What changed, and why                          |
+| [ANALYSIS.md](ANALYSIS.md)                   | The code review that drove the 1.1 rewrite     |
 
 ---
 

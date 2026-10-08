@@ -154,9 +154,12 @@ advisory that landed since.
   trust subnets, GHSA-jqcg-44mw-7w3h) by moving to Express 4.22.3. Back to zero
   known vulnerabilities.
 - **Documentation consolidated.** `docs/unraid.md` and `docs/optimization.md`
-  are the current guides. `INTEGRATION_GUIDE.md` and `QUICK_REFERENCE.md` were
-  written before the app existed and still documented the multi-provider
-  OpenAI architecture removed in #1; they move to `docs/archive/` behind a
-  banner saying so rather than being deleted.
+  are the current guides, indexed from the README. `INTEGRATION_GUIDE.md` and
+  `QUICK_REFERENCE.md` are deleted: both were written before the app existed and
+  still documented the multi-provider OpenAI architecture (`aiServiceFactory`,
+  `AI_PROVIDER`, `OPENAI_API_KEY`) removed in #1, so they described a codebase
+  that had not existed for months. Git history retains them if ever needed.
+  `docs/optimization.md` is corrected too — it still claimed a flat 0.95
+  word-list confidence, which stopped being true in 1.1.
 - **Prettier added** alongside ESLint, and wired into `npm run lint` so CI
   checks formatting. The reformat is a separate commit.
