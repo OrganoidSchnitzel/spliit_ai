@@ -7,8 +7,8 @@ Fixes every finding in `ANALYSIS.md`, plus a rebuilt UI.
 ### Fixed — correctness
 
 - **Word-list matching no longer matches substrings.** `combined.includes(keyword)`
-  matched `bar` inside *Bargeld*, `jet` inside *Jetzt*, `real` inside *Cereal* and
-  `total` inside *Hotel Total*, then auto-applied the result at 0.95 confidence —
+  matched `bar` inside _Bargeld_, `jet` inside _Jetzt_, `real` inside _Cereal_ and
+  `total` inside _Hotel Total_, then auto-applied the result at 0.95 confidence —
   writing wrong categories straight into the Spliit database. Matching now runs at
   token boundaries, with German compounds handled in both directions
   (*Tankstellen*rechnung and Kleider*schrank*), umlaut folding so `möbel` and
@@ -56,7 +56,7 @@ Fixes every finding in `ANALYSIS.md`, plus a rebuilt UI.
 ### Faster
 
 - `keep_alive` now defaults to 30m. Ollama's own default is 5m, shorter than the
-  15m schedule, so the model was evicted and re-read from disk before *every* batch —
+  15m schedule, so the model was evicted and re-read from disk before _every_ batch —
   the dominant cost on a CPU-only box.
 - Ollama requests set `temperature: 0` (making categorization reproducible),
   `num_predict` (capping runaway generations that previously only stopped at the
@@ -134,3 +134,29 @@ configuration change on the user's side. Both were regressions introduced by
   `history.db` as `app.db` needs write permission on the directory; if that
   fails the app now logs a warning and keeps using the existing file instead of
   refusing to boot.
+
+## 1.1.2
+
+Closes the remaining items from `ANALYSIS.md` that 1.1.0 left open, plus a new
+advisory that landed since.
+
+- **Row category pickers populate lazily.** Spliit ships 44 categories, so a
+  100-row history page was building 4,400 `<option>` nodes on every render —
+  and the table re-renders after every Apply. A row now carries only its
+  placeholder (and its current category, if it has one) until the select is
+  actually opened. Measured on a 13-row page: 25 nodes instead of 585.
+- **`X-Forwarded-For` is no longer trusted by default.** 1.1.0 set
+  `trust proxy: 1` unconditionally so the rate limiter could see real client
+  IPs behind a reverse proxy. On a directly-exposed port that is backwards: any
+  client can set the header and claim any address, walking past the limiter.
+  It is now opt-in via `TRUST_PROXY` (a hop count, `loopback`, or a subnet).
+- **`proxy-addr` critical advisory patched** (IP spoofing via IPv4-mapped IPv6
+  trust subnets, GHSA-jqcg-44mw-7w3h) by moving to Express 4.22.3. Back to zero
+  known vulnerabilities.
+- **Documentation consolidated.** `docs/unraid.md` and `docs/optimization.md`
+  are the current guides. `INTEGRATION_GUIDE.md` and `QUICK_REFERENCE.md` were
+  written before the app existed and still documented the multi-provider
+  OpenAI architecture removed in #1; they move to `docs/archive/` behind a
+  banner saying so rather than being deleted.
+- **Prettier added** alongside ESLint, and wired into `npm run lint` so CI
+  checks formatting. The reformat is a separate commit.
