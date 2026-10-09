@@ -47,7 +47,11 @@ beforeEach(() => {
 describe('processExpense', () => {
   it('applies a suggestion that clears the threshold', async () => {
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.9, reasoning: 'r', source: 'llm',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.9,
+      reasoning: 'r',
+      source: 'llm',
     });
     db.query.mockResolvedValue({ rows: [] });
 
@@ -59,7 +63,11 @@ describe('processExpense', () => {
 
   it('holds a suggestion below the threshold without writing to Spliit', async () => {
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.2, reasoning: 'r', source: 'llm',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.2,
+      reasoning: 'r',
+      source: 'llm',
     });
 
     const res = await categorizationService.processExpense(EXPENSE, CATEGORIES);
@@ -81,7 +89,11 @@ describe('processExpense', () => {
   it('writes nothing to Spliit in dry-run mode but still logs', async () => {
     settingsStore.setMany({ dryRun: true });
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.95, reasoning: 'r', source: 'wordlist',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.95,
+      reasoning: 'r',
+      source: 'wordlist',
     });
 
     const res = await categorizationService.processExpense(EXPENSE, CATEGORIES);
@@ -94,17 +106,27 @@ describe('processExpense', () => {
   it('holds word-list matches for review when auto-apply is off', async () => {
     settingsStore.setMany({ autoApplyWordListMatches: false });
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.95, reasoning: 'r', source: 'wordlist',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.95,
+      reasoning: 'r',
+      source: 'wordlist',
     });
 
-    expect((await categorizationService.processExpense(EXPENSE, CATEGORIES)).status).toBe('low_confidence');
+    expect((await categorizationService.processExpense(EXPENSE, CATEGORIES)).status).toBe(
+      'low_confidence'
+    );
     expect(db.query).not.toHaveBeenCalled();
   });
 
   it('records the source and duration for later analysis', async () => {
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.9, reasoning: 'r',
-      source: 'wordlist', durationMs: 12,
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.9,
+      reasoning: 'r',
+      source: 'wordlist',
+      durationMs: 12,
     });
     db.query.mockResolvedValue({ rows: [] });
 
@@ -125,8 +147,12 @@ describe('isDue — retry backoff', () => {
   });
 
   it('defers an expense attempted more recently than the backoff allows', () => {
-    expect(categorizationService.isDue({ attempts: 1, hoursSinceLast: 0.5 }, backoff)).toMatchObject({
-      due: false, parked: false, waitHours: 1,
+    expect(
+      categorizationService.isDue({ attempts: 1, hoursSinceLast: 0.5 }, backoff)
+    ).toMatchObject({
+      due: false,
+      parked: false,
+      waitHours: 1,
     });
   });
 
@@ -135,13 +161,20 @@ describe('isDue — retry backoff', () => {
   });
 
   it('escalates the wait with each attempt', () => {
-    expect(categorizationService.isDue({ attempts: 2, hoursSinceLast: 3 }, backoff).waitHours).toBe(6);
-    expect(categorizationService.isDue({ attempts: 3, hoursSinceLast: 10 }, backoff).waitHours).toBe(24);
+    expect(categorizationService.isDue({ attempts: 2, hoursSinceLast: 3 }, backoff).waitHours).toBe(
+      6
+    );
+    expect(
+      categorizationService.isDue({ attempts: 3, hoursSinceLast: 10 }, backoff).waitHours
+    ).toBe(24);
   });
 
   it('parks an expense once the backoff steps are exhausted', () => {
-    expect(categorizationService.isDue({ attempts: 4, hoursSinceLast: 999 }, backoff)).toMatchObject({
-      due: false, parked: true,
+    expect(
+      categorizationService.isDue({ attempts: 4, hoursSinceLast: 999 }, backoff)
+    ).toMatchObject({
+      due: false,
+      parked: true,
     });
   });
 });
@@ -165,7 +198,10 @@ describe('runBatch', () => {
     mockQueries({ expenses: [EXPENSE] });
     // A failed attempt right now puts the expense inside the first backoff step.
     historyService.recordResult({
-      expenseId: 'e-1', title: 'Aldi', amount: 2000, status: 'low_confidence',
+      expenseId: 'e-1',
+      title: 'Aldi',
+      amount: 2000,
+      status: 'low_confidence',
     });
 
     const stats = await categorizationService.runBatch();
@@ -178,10 +214,17 @@ describe('runBatch', () => {
   it('processes a recently-attempted expense when forced', async () => {
     mockQueries({ expenses: [EXPENSE] });
     historyService.recordResult({
-      expenseId: 'e-1', title: 'Aldi', amount: 2000, status: 'low_confidence',
+      expenseId: 'e-1',
+      title: 'Aldi',
+      amount: 2000,
+      status: 'low_confidence',
     });
     ollamaService.suggestCategory.mockResolvedValue({
-      categoryId: 1, categoryName: 'Groceries', confidence: 0.9, reasoning: 'r', source: 'llm',
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.9,
+      reasoning: 'r',
+      source: 'llm',
     });
 
     expect((await categorizationService.runBatch({ force: true })).processed).toBe(1);
@@ -191,7 +234,10 @@ describe('runBatch', () => {
     mockQueries({ expenses: [EXPENSE] });
     for (let i = 0; i < 4; i += 1) {
       historyService.recordResult({
-        expenseId: 'e-1', title: 'Aldi', amount: 2000, status: 'low_confidence',
+        expenseId: 'e-1',
+        title: 'Aldi',
+        amount: 2000,
+        status: 'low_confidence',
       });
     }
 
@@ -204,14 +250,24 @@ describe('runBatch', () => {
   it('refuses to start a second run while one is in flight', async () => {
     mockQueries({ expenses: [EXPENSE] });
     let release;
-    ollamaService.suggestCategory.mockReturnValue(new Promise((r) => { release = r; }));
+    ollamaService.suggestCategory.mockReturnValue(
+      new Promise((r) => {
+        release = r;
+      })
+    );
 
     const first = categorizationService.runBatch();
     const second = await categorizationService.runBatch();
 
     expect(second).toMatchObject({ skipped: true, reason: 'already_running' });
 
-    release({ categoryId: 1, categoryName: 'Groceries', confidence: 0.1, reasoning: 'r', source: 'llm' });
+    release({
+      categoryId: 1,
+      categoryName: 'Groceries',
+      confidence: 0.1,
+      reasoning: 'r',
+      source: 'llm',
+    });
     await first;
     expect(categorizationService.isRunning()).toBe(false);
   });
@@ -221,9 +277,13 @@ describe('applyManualCategory', () => {
   it('writes to Spliit and records the correction in history', async () => {
     db.query.mockResolvedValue({ rows: [] });
 
-    await categorizationService.applyManualCategory(EXPENSE, { id: 2, name: 'Fuel' }, {
-      note: 'Corrected from "Groceries".',
-    });
+    await categorizationService.applyManualCategory(
+      EXPENSE,
+      { id: 2, name: 'Fuel' },
+      {
+        note: 'Corrected from "Groceries".',
+      }
+    );
 
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE "Expense"'), [2, 'e-1']);
     expect(historyService.getHistory({ limit: 1 }).rows[0]).toMatchObject({

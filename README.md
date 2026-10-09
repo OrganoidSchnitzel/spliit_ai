@@ -22,7 +22,7 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 - **Customizable prompt template** – edit and preview the LLM prompt in the UI. Validated,
   and persisted across restarts.
 - **Word list management** – add/remove keywords in the Settings UI, test a title against
-  every list, and reset a list to its shipped state. Additions *and* removals persist.
+  every list, and reset a list to its shipped state. Additions _and_ removals persist.
 - **Playground** – test a suggestion on a real or made-up expense, and see which keyword
   decided the outcome.
 - **Dashboard** – service health, outstanding work, and inline category assignment.
@@ -32,10 +32,19 @@ Automatically categorize your [Spliit](https://github.com/spliit-app/spliit) exp
 - **REST API** – trigger runs, get suggestions, or apply categories programmatically.
   Optional shared-secret authentication.
 - **Docker-ready** – a `Dockerfile` and `docker-compose.yml` are included.
-- **Unraid-ready** – see [UNRAID_SETUP.md](UNRAID_SETUP.md) for step-by-step instructions.
+- **Unraid-ready** – see [docs/unraid.md](docs/unraid.md) for step-by-step instructions.
 
 > See [CHANGELOG.md](CHANGELOG.md) for what changed in v1.1, and
 > [ANALYSIS.md](ANALYSIS.md) for the review that drove it.
+
+### Documentation
+
+|                                              |                                                |
+| -------------------------------------------- | ---------------------------------------------- |
+| [docs/unraid.md](docs/unraid.md)             | Step-by-step Unraid setup                      |
+| [docs/optimization.md](docs/optimization.md) | Model choice and tuning for low-power hardware |
+| [CHANGELOG.md](CHANGELOG.md)                 | What changed, and why                          |
+| [ANALYSIS.md](ANALYSIS.md)                   | The code review that drove the 1.1 rewrite     |
 
 ---
 
@@ -65,11 +74,11 @@ Spliit AI connects **directly to the same PostgreSQL database** that Spliit uses
 
 ### Prerequisites
 
-| Service | Requirement |
-|---------|-------------|
-| Node.js | ≥ 18 |
-| PostgreSQL | Same instance used by Spliit |
-| Ollama | Running locally with at least one model pulled |
+| Service    | Requirement                                    |
+| ---------- | ---------------------------------------------- |
+| Node.js    | ≥ 18                                           |
+| PostgreSQL | Same instance used by Spliit                   |
+| Ollama     | Running locally with at least one model pulled |
 
 ### 1. Clone and install
 
@@ -88,18 +97,18 @@ cp .env.example .env
 
 Key variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | `localhost` | Spliit PostgreSQL host |
-| `DB_NAME` | `spliit` | Database name |
-| `DB_USER` | `postgres` | Database user |
-| `DB_PASSWORD` | – | Database password |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `llama3.2` | Model to use (must be pulled) |
-| `CONFIDENCE_THRESHOLD` | `0.6` | Min confidence to auto-apply (0–1) |
-| `SCHEDULER_ENABLED` | `true` | Enable periodic runs |
-| `SCHEDULER_CRON` | `*/15 * * * *` | Cron expression for automatic runs |
-| `BATCH_SIZE` | `10` | Max expenses per scheduled run |
+| Variable               | Default                  | Description                        |
+| ---------------------- | ------------------------ | ---------------------------------- |
+| `DB_HOST`              | `localhost`              | Spliit PostgreSQL host             |
+| `DB_NAME`              | `spliit`                 | Database name                      |
+| `DB_USER`              | `postgres`               | Database user                      |
+| `DB_PASSWORD`          | –                        | Database password                  |
+| `OLLAMA_BASE_URL`      | `http://localhost:11434` | Ollama API base URL                |
+| `OLLAMA_MODEL`         | `llama3.2`               | Model to use (must be pulled)      |
+| `CONFIDENCE_THRESHOLD` | `0.6`                    | Min confidence to auto-apply (0–1) |
+| `SCHEDULER_ENABLED`    | `true`                   | Enable periodic runs               |
+| `SCHEDULER_CRON`       | `*/15 * * * *`           | Cron expression for automatic runs |
+| `BATCH_SIZE`           | `10`                     | Max expenses per scheduled run     |
 
 ### 3. Pull a model
 
@@ -137,7 +146,7 @@ docker compose up -d
 
 ## Unraid Installation
 
-For a full step-by-step guide to running Spliit AI on an Unraid server (including finding your Spliit network, building the image, volume mounts, and Ollama GPU setup), see **[UNRAID_SETUP.md](UNRAID_SETUP.md)**.
+For a full step-by-step guide to running Spliit AI on an Unraid server (including finding your Spliit network, building the image, volume mounts, and Ollama GPU setup), see **[docs/unraid.md](docs/unraid.md)**.
 
 ---
 
@@ -145,36 +154,36 @@ For a full step-by-step guide to running Spliit AI on an Unraid server (includin
 
 All endpoints are under `/api`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/health` | Service health (DB + Ollama + scheduler) |
-| `GET` | `/api/categories` | List all Spliit categories |
-| `GET` | `/api/expenses/uncategorized` | Uncategorized expenses + total outstanding |
-| `POST` | `/api/expenses/:id/suggest` | Get a suggestion (no DB write) |
-| `POST` | `/api/expenses/preview` | Suggest for a made-up expense that need not exist |
-| `POST` | `/api/expenses/:id/apply` | Apply a category; recorded as a manual correction |
-| `POST` | `/api/expenses/:id/park` | Stop retrying this expense |
-| `DELETE` | `/api/expenses/:id/park` | Resume retrying it |
-| `POST` | `/api/process` | Trigger a batch run (`{ force, dryRun }`) |
-| `GET` | `/api/process/status` | Whether a run is in flight, and the last result |
-| `GET` | `/api/history` | History (`?limit&offset&status&search`) + stats |
-| `GET` | `/api/history/corrections` | Where a manual correction overrode a suggestion |
-| `DELETE` | `/api/history` | Clear the log |
-| `POST` | `/api/history/prune` | Apply the retention policy now |
-| `GET` | `/api/settings` | Effective settings, the schema, and read-only process config |
-| `PATCH` | `/api/settings` | Update settings (validated, all-or-nothing) |
-| `DELETE` | `/api/settings/:key` | Revert one setting to its environment default |
-| `DELETE` | `/api/settings` | Revert every setting |
-| `GET` | `/api/models` | Models Ollama has pulled, plus recommendations |
-| `GET` | `/api/wordlists` | All word lists, annotated with your edits |
-| `POST` | `/api/wordlists/test` | Explain what a title would match |
-| `POST` | `/api/wordlists/:listName/keywords` | Add a keyword |
-| `DELETE` | `/api/wordlists/:listName/keywords/:keyword` | Remove a keyword |
-| `POST` | `/api/wordlists/:listName/reset` | Restore a list's shipped keywords (`all` for every list) |
-| `GET` | `/api/prompt/template` | Current prompt template |
-| `POST` | `/api/prompt/template` | Update it (validated, persisted) |
-| `POST` | `/api/prompt/preview` | Render a template against a sample expense |
-| `DELETE` | `/api/prompt/template` | Reset to the built-in prompt |
+| Method   | Path                                         | Description                                                  |
+| -------- | -------------------------------------------- | ------------------------------------------------------------ |
+| `GET`    | `/api/health`                                | Service health (DB + Ollama + scheduler)                     |
+| `GET`    | `/api/categories`                            | List all Spliit categories                                   |
+| `GET`    | `/api/expenses/uncategorized`                | Uncategorized expenses + total outstanding                   |
+| `POST`   | `/api/expenses/:id/suggest`                  | Get a suggestion (no DB write)                               |
+| `POST`   | `/api/expenses/preview`                      | Suggest for a made-up expense that need not exist            |
+| `POST`   | `/api/expenses/:id/apply`                    | Apply a category; recorded as a manual correction            |
+| `POST`   | `/api/expenses/:id/park`                     | Stop retrying this expense                                   |
+| `DELETE` | `/api/expenses/:id/park`                     | Resume retrying it                                           |
+| `POST`   | `/api/process`                               | Trigger a batch run (`{ force, dryRun }`)                    |
+| `GET`    | `/api/process/status`                        | Whether a run is in flight, and the last result              |
+| `GET`    | `/api/history`                               | History (`?limit&offset&status&search`) + stats              |
+| `GET`    | `/api/history/corrections`                   | Where a manual correction overrode a suggestion              |
+| `DELETE` | `/api/history`                               | Clear the log                                                |
+| `POST`   | `/api/history/prune`                         | Apply the retention policy now                               |
+| `GET`    | `/api/settings`                              | Effective settings, the schema, and read-only process config |
+| `PATCH`  | `/api/settings`                              | Update settings (validated, all-or-nothing)                  |
+| `DELETE` | `/api/settings/:key`                         | Revert one setting to its environment default                |
+| `DELETE` | `/api/settings`                              | Revert every setting                                         |
+| `GET`    | `/api/models`                                | Models Ollama has pulled, plus recommendations               |
+| `GET`    | `/api/wordlists`                             | All word lists, annotated with your edits                    |
+| `POST`   | `/api/wordlists/test`                        | Explain what a title would match                             |
+| `POST`   | `/api/wordlists/:listName/keywords`          | Add a keyword                                                |
+| `DELETE` | `/api/wordlists/:listName/keywords/:keyword` | Remove a keyword                                             |
+| `POST`   | `/api/wordlists/:listName/reset`             | Restore a list's shipped keywords (`all` for every list)     |
+| `GET`    | `/api/prompt/template`                       | Current prompt template                                      |
+| `POST`   | `/api/prompt/template`                       | Update it (validated, persisted)                             |
+| `POST`   | `/api/prompt/preview`                        | Render a template against a sample expense                   |
+| `DELETE` | `/api/prompt/template`                       | Reset to the built-in prompt                                 |
 
 When `API_TOKEN` is set, every endpoint except `/api/health` requires
 `X-Api-Token: <token>` or `Authorization: Bearer <token>`.
@@ -227,7 +236,7 @@ Tests use [Jest](https://jestjs.io/) with all external services mocked (no live 
 1. **Scheduler** fires according to `SCHEDULER_CRON` (default every 15 minutes). A run
    will not start while another is still going.
 2. **categorizationService** queries for expenses with `categoryId = 0`, excluding parked
-   ones, then filters to those actually *due*: an expense that has already been attempted
+   ones, then filters to those actually _due_: an expense that has already been attempted
    waits out an escalating backoff (`RETRY_BACKOFF_HOURS`, default 1h → 6h → 24h) before
    being tried again, and is parked after the last step. Without this, an expense the model
    cannot categorize is re-sent on every run forever and starves everything older than it.

@@ -6,10 +6,10 @@ services:
     container_name: spliit-ai
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       # ── Spliit PostgreSQL connection ──────────────────────────────────────
-      DB_HOST: ${DB_HOST:-spliit-postgres}   # hostname of the Spliit DB container
+      DB_HOST: ${DB_HOST:-spliit-postgres} # hostname of the Spliit DB container
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-spliit}
       DB_USER: ${DB_USER:-postgres}

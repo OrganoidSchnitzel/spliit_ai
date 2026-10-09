@@ -27,7 +27,9 @@ function init() {
 
   const overridden = settingsStore.getOverriddenKeys();
   if (overridden.length) {
-    console.log(`[App] ${overridden.length} setting(s) overridden from the UI: ${overridden.join(', ')}`);
+    console.log(
+      `[App] ${overridden.length} setting(s) overridden from the UI: ${overridden.join(', ')}`
+    );
   }
   if (settingsStore.get('dryRun')) {
     console.warn('[App] DRY RUN is enabled — no categories will be written to Spliit.');
@@ -35,7 +37,13 @@ function init() {
 }
 
 const app = express();
-app.set('trust proxy', 1);
+
+// Only believe X-Forwarded-For when the deployment actually has a proxy in
+// front. Trusting it unconditionally means a client reaching the port directly
+// can spoof its address and bypass the rate limiter entirely.
+if (config.trustProxy !== false) {
+  app.set('trust proxy', config.trustProxy);
+}
 
 // ─── Rate limiting ─────────────────────────────────────────────────────────────
 const limiter = rateLimit({
@@ -67,8 +75,7 @@ function requireToken(req, res, next) {
 
   const expected = Buffer.from(config.apiToken);
   const actual = Buffer.from(provided);
-  const ok =
-    expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  const ok = expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 
   if (!ok) return res.status(401).json({ error: 'Missing or invalid API token' });
   return next();

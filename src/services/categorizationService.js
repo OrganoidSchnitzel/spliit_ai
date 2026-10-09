@@ -22,9 +22,7 @@ async function getCategories(opts = {}) {
   const fresh = Date.now() - categoryCache.fetchedAt < CATEGORY_CACHE_TTL_MS;
   if (!opts.force && categoryCache.rows && fresh) return categoryCache.rows;
 
-  const res = await db.query(
-    'SELECT id, grouping, name FROM "Category" ORDER BY grouping, name'
-  );
+  const res = await db.query('SELECT id, grouping, name FROM "Category" ORDER BY grouping, name');
   categoryCache = { rows: res.rows, fetchedAt: Date.now() };
   return res.rows;
 }
@@ -88,10 +86,7 @@ async function getExpenseById(expenseId) {
  * @param {number} categoryId
  */
 async function updateExpenseCategory(expenseId, categoryId) {
-  await db.query('UPDATE "Expense" SET "categoryId" = $1 WHERE id = $2', [
-    categoryId,
-    expenseId,
-  ]);
+  await db.query('UPDATE "Expense" SET "categoryId" = $1 WHERE id = $2', [categoryId, expenseId]);
 }
 
 /**

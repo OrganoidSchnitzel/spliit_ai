@@ -3,10 +3,10 @@ name: Build and Publish Docker Image
 # Triggers on EVERY branch push AND every published release
 on:
   push:
-    branches: [ "**" ]
+    branches: ['**']
   pull_request:
   release:
-    types: [ "published" ]
+    types: ['published']
 
 env:
   REGISTRY: ghcr.io

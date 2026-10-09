@@ -6,12 +6,12 @@ This guide walks you through installing **Spliit AI** on an Unraid server alongs
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| Unraid 6.12+ | Earlier versions should also work |
-| Spliit already running | Including its PostgreSQL database |
-| Ollama already running | With at least one model pulled (e.g. `llama3.2`) |
-| Community Applications plugin | For easy Docker container management |
+| Requirement                   | Notes                                            |
+| ----------------------------- | ------------------------------------------------ |
+| Unraid 6.12+                  | Earlier versions should also work                |
+| Spliit already running        | Including its PostgreSQL database                |
+| Ollama already running        | With at least one model pulled (e.g. `llama3.2`) |
+| Community Applications plugin | For easy Docker container management             |
 
 > **Tip:** If Ollama is not yet installed, see [Installing Ollama on Unraid](#installing-ollama-on-unraid) at the bottom of this guide.
 
@@ -179,6 +179,7 @@ http://<your-unraid-ip>:3000
 ```
 
 You will see the **Dashboard** with:
+
 - Database connection status
 - Ollama connection status + active model
 - Scheduler status
@@ -305,12 +306,12 @@ If you do not yet have Ollama running on Unraid:
 
 ## Recommended models
 
-| Model | Size | Quality | Notes |
-|-------|------|---------|-------|
-| `llama3.2` | ~2 GB | ★★★★☆ | Good default, fast on CPU |
-| `llama3.2:1b` | ~900 MB | ★★★☆☆ | Smallest footprint, still usable |
-| `mistral` | ~4 GB | ★★★★★ | Better quality, needs more RAM |
-| `qwen2.5:3b` | ~2 GB | ★★★★☆ | Efficient, good multilingual |
+| Model         | Size    | Quality | Notes                            |
+| ------------- | ------- | ------- | -------------------------------- |
+| `llama3.2`    | ~2 GB   | ★★★★☆   | Good default, fast on CPU        |
+| `llama3.2:1b` | ~900 MB | ★★★☆☆   | Smallest footprint, still usable |
+| `mistral`     | ~4 GB   | ★★★★★   | Better quality, needs more RAM   |
+| `qwen2.5:3b`  | ~2 GB   | ★★★★☆   | Efficient, good multilingual     |
 
 Pull any of these with:
 

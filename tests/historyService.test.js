@@ -5,7 +5,12 @@ const settingsStore = require('../src/settingsStore');
 const historyService = require('../src/services/historyService');
 
 const row = (over = {}) => ({
-  expenseId: 'e-1', title: 'Aldi', amount: 2000, currency: 'EUR', status: 'applied', ...over,
+  expenseId: 'e-1',
+  title: 'Aldi',
+  amount: 2000,
+  currency: 'EUR',
+  status: 'applied',
+  ...over,
 });
 
 beforeAll(() => {
@@ -34,18 +39,22 @@ describe('history storage', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='history'")
       .all()
       .map((r) => r.name);
-    expect(indexes).toEqual(expect.arrayContaining([
-      'idx_history_processed_at',
-      'idx_history_expense_id',
-      'idx_history_status',
-    ]));
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        'idx_history_processed_at',
+        'idx_history_expense_id',
+        'idx_history_status',
+      ])
+    );
   });
 });
 
 describe('filtering and paging', () => {
   beforeEach(() => {
     historyService.recordResult(row({ expenseId: 'a', title: 'Rewe Markt', status: 'applied' }));
-    historyService.recordResult(row({ expenseId: 'b', title: 'Shell Tanken', status: 'low_confidence' }));
+    historyService.recordResult(
+      row({ expenseId: 'b', title: 'Shell Tanken', status: 'low_confidence' })
+    );
     historyService.recordResult(row({ expenseId: 'c', title: 'Kino Abend', status: 'error' }));
   });
 
@@ -103,23 +112,40 @@ describe('stats', () => {
     historyService.recordResult(row({ status: 'error' }));
 
     expect(historyService.getStats()).toMatchObject({
-      total: 3, applied: 2, errors: 1, viaWordList: 1, viaLlm: 1, avgLlmMs: 2000,
+      total: 3,
+      applied: 2,
+      errors: 1,
+      viaWordList: 1,
+      viaLlm: 1,
+      avgLlmMs: 2000,
     });
   });
 });
 
 describe('corrections', () => {
   it('pairs a manual correction with the suggestion it replaced', () => {
-    historyService.recordResult(row({ status: 'low_confidence', categoryName: 'Movies', source: 'llm' }));
-    historyService.recordResult(row({ status: 'manual', categoryName: 'Groceries', source: 'manual' }));
+    historyService.recordResult(
+      row({ status: 'low_confidence', categoryName: 'Movies', source: 'llm' })
+    );
+    historyService.recordResult(
+      row({ status: 'manual', categoryName: 'Groceries', source: 'manual' })
+    );
 
     const [correction] = historyService.getCorrections();
-    expect(correction).toMatchObject({ suggested: 'Movies', corrected_to: 'Groceries', suggested_source: 'llm' });
+    expect(correction).toMatchObject({
+      suggested: 'Movies',
+      corrected_to: 'Groceries',
+      suggested_source: 'llm',
+    });
   });
 
   it('ignores a manual entry that merely confirmed the suggestion', () => {
-    historyService.recordResult(row({ status: 'applied', categoryName: 'Groceries', source: 'llm' }));
-    historyService.recordResult(row({ status: 'manual', categoryName: 'Groceries', source: 'manual' }));
+    historyService.recordResult(
+      row({ status: 'applied', categoryName: 'Groceries', source: 'llm' })
+    );
+    historyService.recordResult(
+      row({ status: 'manual', categoryName: 'Groceries', source: 'manual' })
+    );
     expect(historyService.getCorrections()).toHaveLength(0);
   });
 });

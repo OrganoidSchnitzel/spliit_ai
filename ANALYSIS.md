@@ -20,7 +20,7 @@ The `.github/workflows/docker.yml` workflow builds and pushes an image to `ghcr.
 ships to the registry unnoticed — which is exactly what happened here.
 
 Root cause of the failures: `suggestCategory()` now consults `germanWordLists.matchWordList()`
-*before* the LLM, so titles like `Lidl groceries`, `IKEA`, and `Schrank` never reach the LLM path
+_before_ the LLM, so titles like `Lidl groceries`, `IKEA`, and `Schrank` never reach the LLM path
 and the heuristic-override tests (`applyTitleSemanticGuard`, `applyFurnitureTitleOverride`) can no
 longer be exercised end-to-end. Those tests were written against the pre-word-list behaviour and
 were never updated when the word lists were merged.
@@ -30,6 +30,7 @@ One failure is independent test drift: `applyGroceryMerchantOverride` is asserte
 override correctly no-ops.
 
 **Fix:**
+
 - Add a `test` job to the workflow and make the `build-and-push-image` job `needs: test`.
 - Rework the override tests to call the override functions directly (unit level) and add
   separate integration tests that stub `matchWordList` to return `null` when the LLM path is
@@ -45,15 +46,15 @@ is **written straight into the user's Spliit Postgres database** with no review 
 
 Reproduced:
 
-| Title | Assigned | Matched on |
-|---|---|---|
-| `Barbecue Grillfleisch` | Liquor | `bar` |
-| `Bargeld Abhebung` | Liquor | `bar` |
-| `Barbier Haarschnitt` | Liquor | `bar` |
-| `Jetzt Pizza` | Gas/Fuel | `jet` |
-| `Cereal Kauf` | Groceries | `real` |
-| `Total Ausgaben Juli` | Gas/Fuel | `total` |
-| `Hotel Total` | Gas/Fuel | `total` |
+| Title                   | Assigned  | Matched on |
+| ----------------------- | --------- | ---------- |
+| `Barbecue Grillfleisch` | Liquor    | `bar`      |
+| `Bargeld Abhebung`      | Liquor    | `bar`      |
+| `Barbier Haarschnitt`   | Liquor    | `bar`      |
+| `Jetzt Pizza`           | Gas/Fuel  | `jet`      |
+| `Cereal Kauf`           | Groceries | `real`     |
+| `Total Ausgaben Juli`   | Gas/Fuel  | `total`    |
+| `Hotel Total`           | Gas/Fuel  | `total`    |
 
 **Fix:** match on word boundaries against a normalised title, the way `hasTitleKeyword()` in
 `ollamaService.js` already does — that helper exists and does the right thing, it is just not used
@@ -64,8 +65,12 @@ need phrase matching, not per-token.
 Suggested shape:
 
 ```js
-const norm = (s) => String(s || '').toLowerCase()
-  .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+const norm = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 function keywordHit(haystack, keyword) {
   return new RegExp(`(?:^|\\s)${escapeRegex(keyword)}(?:\\s|$)`, 'u').test(haystack);
@@ -130,7 +135,7 @@ const payload = {
   model: config.ollama.model,
   prompt,
   stream: false,
-  format: OLLAMA_RESPONSE_SCHEMA,   // see 2.3
+  format: OLLAMA_RESPONSE_SCHEMA, // see 2.3
   keep_alive: config.ollama.keepAlive ?? '30m',
   options: { temperature: 0, num_predict: 200, num_ctx: 2048 },
 };
@@ -190,13 +195,13 @@ function num(name, raw, { min, max, fallback }) {
 ### 3.2 Concurrent batch runs are not prevented
 
 `node-cron` fires the next tick regardless of whether the previous async callback has finished, and
-`POST /api/process` can be triggered from the UI at the same time. Two runs then select the *same*
+`POST /api/process` can be triggered from the UI at the same time. Two runs then select the _same_
 uncategorized rows and both call the LLM on them. Guard with a module-level `isRunning` flag in
 `categorizationService.runBatch()` and return `{ skipped: true }` to the caller.
 
 ### 3.3 Removing a built-in keyword does not survive a restart
 
-`manual-keywords.json` records *additions* only. `removeKeyword()` deletes from the in-memory list
+`manual-keywords.json` records _additions_ only. `removeKeyword()` deletes from the in-memory list
 and, if it was manual, untracks it — but deleting a **built-in** keyword persists nothing, so it
 reappears on the next boot. Given 1.2, deleting a built-in like `bar` or `jet` is precisely what a
 user will want to do first. Persist a `removed` set alongside `added` and subtract it during
@@ -239,7 +244,7 @@ if (parsedKeys.length !== expectedKeys.length || expectedKeys.some(...)) throw .
 ```
 
 An exact key-set match means one extra key from the model (`"category"`, `"explanation"`) fails the
-whole expense and records it as an `error`. Check that the required keys are *present* and ignore
+whole expense and records it as an `error`. Check that the required keys are _present_ and ignore
 extras.
 
 ### 3.8 Unknown `/api/*` routes return HTML with status 200
@@ -303,7 +308,7 @@ the same `expense_id` four, ten, or fifty times.
 
 The consequence is that `document.getElementById(selectId)` — used in `bindHistoryActions()` —
 returns the **first** element with that ID. Click Apply on the fifth row for an expense and you
-apply whatever category is selected in the *first* row for that expense, which is a different
+apply whatever category is selected in the _first_ row for that expense, which is a different
 (usually stale) value. The user sees `✔ Category "X" applied` with a category they did not choose.
 The `949b68d` commit moved the code from correct to incorrect; reverting that one line fixes it.
 
@@ -353,7 +358,7 @@ and it pairs naturally with the backoff work in 2.1.
   `README` + `docs/`.
 - **The heuristic override layer in `ollamaService.js`** (`applyGroceryMerchantOverride`,
   `applyFurnitureTitleOverride`, `applyTitleSemanticGuard`, ~180 lines) duplicates in code what the
-  word lists express as data — and since the word lists run *first*, the grocery and furniture
+  word lists express as data — and since the word lists run _first_, the grocery and furniture
   overrides are now largely unreachable for the exact merchants they name. Fold them into the word
   list mechanism and delete the duplicated logic.
 

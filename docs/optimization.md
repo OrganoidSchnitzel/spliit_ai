@@ -3,6 +3,7 @@
 This guide provides recommendations for optimizing Spliit AI on systems with Intel N100 processors and 16GB RAM.
 
 ## Table of Contents
+
 - [System Requirements](#system-requirements)
 - [Recommended LLM Models](#recommended-llm-models)
 - [Performance Optimizations](#performance-optimizations)
@@ -15,12 +16,14 @@ This guide provides recommendations for optimizing Spliit AI on systems with Int
 ## System Requirements
 
 ### Minimum Requirements
+
 - **CPU**: Intel N100 (4 cores, 8 threads) or equivalent
 - **RAM**: 8GB (16GB recommended)
 - **Storage**: 10GB free space (for Ollama models)
 - **OS**: Linux, Windows, or macOS
 
 ### Recommended Setup
+
 - **RAM**: 16GB for optimal performance
 - **Storage**: SSD for faster model loading
 - **Docker**: Optional but recommended for easier deployment
@@ -34,6 +37,7 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
 ### Tier 1: Best Performance (Recommended for N100)
 
 #### 1. **Llama 3.2 3B** (Default)
+
 - **Model ID**: `llama3.2`
 - **Size**: ~2GB
 - **RAM Usage**: 3-4GB
@@ -50,6 +54,7 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
   ```
 
 #### 2. **Gemma 2B**
+
 - **Model ID**: `gemma:2b`
 - **Size**: ~1.7GB
 - **RAM Usage**: 2-3GB
@@ -66,6 +71,7 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
   ```
 
 #### 3. **Phi-3 Mini**
+
 - **Model ID**: `phi3:mini`
 - **Size**: ~2.3GB
 - **RAM Usage**: 3-4GB
@@ -84,6 +90,7 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
 ### Tier 2: Higher Accuracy (May be slower on N100)
 
 #### 4. **Llama 3.2 7B** (Quantized)
+
 - **Model ID**: `llama3.2:7b-q4_0`
 - **Size**: ~4GB
 - **RAM Usage**: 5-6GB
@@ -101,6 +108,7 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
   ```
 
 #### 5. **Mistral 7B** (Quantized)
+
 - **Model ID**: `mistral:7b-q4_0`
 - **Size**: ~4.1GB
 - **RAM Usage**: 5-7GB
@@ -126,17 +134,20 @@ The following models are optimized for Intel N100 systems with 16GB RAM. They ba
 **Impact**: Reduces LLM calls by 60-80% for common German merchants
 
 Spliit AI now checks German word lists **before** calling the LLM. This dramatically reduces processing time for common expenses like:
+
 - Grocery stores (Aldi, Lidl, Rewe, Edeka, Kaufland)
 - Gas stations (Shell, Aral, Tankstelle)
 - Furniture (IKEA, Möbel)
 - Restaurants, pharmacies, etc.
 
 **Configuration**:
+
 - Navigate to **Settings → German Word Lists** in the UI
 - Add custom keywords for your frequently used merchants
 - Keywords are matched instantly without LLM inference
 
 **Example Performance**:
+
 - Without word lists: 100 expenses × 3 seconds = 5 minutes
 - With word lists (70% match rate): 30 expenses × 3 seconds = 1.5 minutes
 - **Speedup**: 3.3x faster
@@ -146,12 +157,14 @@ Spliit AI now checks German word lists **before** calling the LLM. This dramatic
 **Impact**: Reduces prompt size by 60%, faster inference
 
 The new default prompt is optimized for smaller models:
+
 - **Compact category format**: `id:name` instead of verbose descriptions
 - **Minimal instructions**: Clear rules without redundancy
 - **No few-shot examples**: Relies on built-in knowledge
 - **Result**: ~200 tokens instead of ~500 tokens per request
 
 **Customization**:
+
 - Navigate to **Settings → Prompt Template**
 - Edit the template to fit your use case
 - Use placeholders: `{{title}}`, `{{amount}}`, `{{notes}}`, `{{categories}}`
@@ -204,7 +217,7 @@ For systems with 16GB RAM, reduce PostgreSQL connection pool:
 ```javascript
 // src/db.js (modify if needed)
 const pool = new Pool({
-  max: 5,  // Reduced from 10
+  max: 5, // Reduced from 10
   idleTimeoutMillis: 30000,
 });
 ```
@@ -234,6 +247,7 @@ Edit `~/.ollama/config.json` (create if it doesn't exist):
 ```
 
 **Key Settings for N100**:
+
 - `num_thread: 8` - Use all N100 threads
 - `num_ctx: 2048` - Smaller context for faster processing
 - `num_batch: 512` - Moderate batch size
@@ -293,12 +307,17 @@ CONFIDENCE_THRESHOLD=0.55
 ### How It Works
 
 1. **Expense received** → Check title against word lists
-2. **Match found** → Return category immediately (0.95 confidence)
+2. **Match found** → Return category immediately. Confidence reflects match
+   quality: 0.95 for a multi-word phrase, 0.93 for a whole word of 5+
+   characters, 0.90 for a German compound, down to 0.80 for a short token.
+   If two lists match equally well the result is discarded as ambiguous and
+   the LLM decides.
 3. **No match** → Fall back to LLM inference
 
 ### Managing Word Lists
 
 #### Via UI (Recommended)
+
 1. Open Spliit AI in browser
 2. Navigate to **Settings**
 3. Scroll to **German Word Lists**
@@ -306,6 +325,7 @@ CONFIDENCE_THRESHOLD=0.55
 5. Add/remove keywords as needed
 
 #### Via API
+
 ```bash
 # Add keyword
 curl -X POST http://localhost:3000/api/wordlists/groceryStores/keywords \
@@ -321,11 +341,13 @@ curl -X DELETE http://localhost:3000/api/wordlists/groceryStores/keywords/your_s
 The following categories have pre-configured German word lists mapped to official [Spliit categories](https://github.com/spliit-app/spliit/blob/main/prisma/migrations/20240108194443_add_categories/migration.sql):
 
 #### Food and Drink
+
 1. **groceryStores**: Lidl, Rewe, Edeka, Aldi, Kaufland, Netto, Penny → `Groceries`, `Food and Drink`
 2. **restaurants**: McDonald's, Burger King, cafes, pizzerias, bakeries → `Dining Out`, `Food and Drink`
 3. **liquor**: Getränkemarkt, wine shops, bars, pubs → `Liquor`, `Food and Drink`
 
 #### Transportation
+
 4. **fuelStations**: Shell, Aral, Esso, Total, tankstelle → `Gas/Fuel`, `Transportation`
 5. **publicTransport**: Deutsche Bahn, MVG, FlixBus, S-Bahn, U-Bahn → `Bus/Train`, `Transportation`
 6. **taxi**: Uber, taxi services, FreeNow → `Taxi`, `Transportation`
@@ -336,6 +358,7 @@ The following categories have pre-configured German word lists mapped to officia
 11. **car**: Auto repair shops, car rentals, Sixt → `Car`, `Transportation`
 
 #### Home
+
 12. **furniture**: IKEA, Möbel stores, Poco, Roller → `Furniture`, `Home`
 13. **electronics**: Media Markt, Saturn, Conrad, Apple → `Electronics`, `Home`
 14. **householdSupplies**: DM, Rossmann, Müller, drugstores → `Household Supplies`, `Home`
@@ -347,11 +370,13 @@ The following categories have pre-configured German word lists mapped to officia
 20. **hardware**: Bauhaus, OBI, Hornbach, DIY stores → `Maintenance`, `Home`
 
 #### Entertainment
+
 21. **entertainment**: Kino, Netflix, Spotify, museums, concerts → `Entertainment`, `Movies`, `Music`
 22. **games**: Steam, PlayStation, Xbox, GameStop → `Games`, `Entertainment`
 23. **sports**: Sportstudio, Decathlon, sports venues → `Sports`, `Entertainment`
 
 #### Life
+
 24. **clothing**: H&M, Zara, C&A, Zalando → `Clothing`, `Life`
 25. **medicalExpenses**: Apotheke, Arzt, Krankenhaus, Zahnarzt → `Medical Expenses`, `Life`
 26. **insurance**: Versicherung, Krankenkasse, Allianz → `Insurance`, `Life`
@@ -362,6 +387,7 @@ The following categories have pre-configured German word lists mapped to officia
 31. **taxes**: Steuer, Finanzamt → `Taxes`, `Life`
 
 #### Utilities
+
 32. **electricity**: Strom, EON, Vattenfall, Stadtwerke → `Electricity`, `Utilities`
 33. **heatGas**: Gas, Heizung, district heating → `Heat/Gas`, `Utilities`
 34. **water**: Wasser, Wasserwerk → `Water`, `Utilities`
@@ -378,6 +404,7 @@ The following categories have pre-configured German word lists mapped to officia
 ### Customizing the Prompt
 
 #### Via UI
+
 1. Navigate to **Settings → Prompt Template**
 2. Edit the template
 3. Click **Save Prompt**
@@ -394,6 +421,7 @@ The following categories have pre-configured German word lists mapped to officia
 ### Example Custom Prompts
 
 #### Minimal Prompt (Fastest)
+
 ```
 Categorize: {{title}}
 Amount: {{amount}}
@@ -402,6 +430,7 @@ Return JSON: {"reasoning":"<why>","categoryName":"<name>","categoryId":<id>,"con
 ```
 
 #### Detailed Prompt (More Accurate)
+
 ```
 You are categorizing expenses for a German user.
 
@@ -442,13 +471,13 @@ Output Format:
 
 ### Test System: Intel N100, 16GB RAM, Ubuntu 22.04
 
-| Model | Avg Inference Time | RAM Usage | Word List Hit Rate | Overall Speed |
-|-------|-------------------|-----------|-------------------|---------------|
-| Gemma 2B | 2.5s | 3GB | 70% | **Best** |
-| Llama 3.2 3B | 3.2s | 4GB | 70% | Very Good |
-| Phi-3 Mini | 3.8s | 4GB | 70% | Good |
-| Llama 3.2 7B (Q4) | 8.5s | 6GB | 70% | Acceptable |
-| Mistral 7B (Q4) | 9.2s | 7GB | 70% | Acceptable |
+| Model             | Avg Inference Time | RAM Usage | Word List Hit Rate | Overall Speed |
+| ----------------- | ------------------ | --------- | ------------------ | ------------- |
+| Gemma 2B          | 2.5s               | 3GB       | 70%                | **Best**      |
+| Llama 3.2 3B      | 3.2s               | 4GB       | 70%                | Very Good     |
+| Phi-3 Mini        | 3.8s               | 4GB       | 70%                | Good          |
+| Llama 3.2 7B (Q4) | 8.5s               | 6GB       | 70%                | Acceptable    |
+| Mistral 7B (Q4)   | 9.2s               | 7GB       | 70%                | Acceptable    |
 
 **Note**: Times are for LLM inference only. Word list matches return in <10ms.
 
@@ -456,12 +485,12 @@ Output Format:
 
 **Scenario**: 100 uncategorized expenses, mixed categories
 
-| Configuration | Processing Time | LLM Calls | Word List Matches |
-|--------------|----------------|-----------|-------------------|
-| Gemma 2B + Word Lists | **3.5 min** | 30 | 70 |
-| Llama 3.2 3B + Word Lists | 4.5 min | 30 | 70 |
-| Gemma 2B (No Word Lists) | 8.2 min | 100 | 0 |
-| Llama 3.2 7B + Word Lists | 9.8 min | 30 | 70 |
+| Configuration             | Processing Time | LLM Calls | Word List Matches |
+| ------------------------- | --------------- | --------- | ----------------- |
+| Gemma 2B + Word Lists     | **3.5 min**     | 30        | 70                |
+| Llama 3.2 3B + Word Lists | 4.5 min         | 30        | 70                |
+| Gemma 2B (No Word Lists)  | 8.2 min         | 100       | 0                 |
+| Llama 3.2 7B + Word Lists | 9.8 min         | 30        | 70                |
 
 **Speedup with word lists**: 2-3x faster
 
@@ -472,6 +501,7 @@ Output Format:
 ### Issue: Ollama times out frequently
 
 **Solution**:
+
 ```env
 OLLAMA_TIMEOUT_MS=60000  # Increase timeout
 BATCH_SIZE=5             # Reduce batch size
@@ -480,6 +510,7 @@ BATCH_SIZE=5             # Reduce batch size
 ### Issue: High memory usage
 
 **Solution**:
+
 - Use smaller model (Gemma 2B or Phi-3 Mini)
 - Reduce PostgreSQL connection pool
 - Restart Ollama periodically: `systemctl restart ollama`
@@ -487,6 +518,7 @@ BATCH_SIZE=5             # Reduce batch size
 ### Issue: Low accuracy with word lists
 
 **Solution**:
+
 - Expand word lists with your merchants
 - Lower confidence threshold to let LLM handle edge cases
 - Review History page for patterns
@@ -494,6 +526,7 @@ BATCH_SIZE=5             # Reduce batch size
 ### Issue: Slow startup
 
 **Solution**:
+
 - Preload Ollama model: `ollama run llama3.2 "test"`
 - Use SSD for model storage
 - Enable `use_mmap` in Ollama config
@@ -512,6 +545,7 @@ BATCH_SIZE=5             # Reduce batch size
 ## Support
 
 For issues or questions:
+
 1. Check the [GitHub Issues](https://github.com/OrganoidSchnitzel/spliit_ai/issues)
 2. Review the [Ollama Troubleshooting Guide](https://github.com/ollama/ollama/blob/main/docs/troubleshooting.md)
 3. Test in Playground mode before reporting bugs
@@ -519,4 +553,4 @@ For issues or questions:
 ---
 
 **Last Updated**: March 2026
-**Version**: 1.0.0
+**Applies to**: Spliit AI 1.1 and later

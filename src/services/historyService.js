@@ -26,7 +26,10 @@ const RETRYABLE_STATUSES = [STATUS.LOW_CONFIDENCE, STATUS.ERROR];
 let stmts = null;
 
 function columnNames(db, table) {
-  return db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  return db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .map((c) => c.name);
 }
 
 function init() {
@@ -53,7 +56,7 @@ function init() {
   // Additive migrations for databases created by earlier versions.
   const existing = columnNames(db, 'history');
   const additions = [
-    ['source', "ALTER TABLE history ADD COLUMN source TEXT"],
+    ['source', 'ALTER TABLE history ADD COLUMN source TEXT'],
     ['duration_ms', 'ALTER TABLE history ADD COLUMN duration_ms INTEGER'],
     ['parked', 'ALTER TABLE history ADD COLUMN parked INTEGER NOT NULL DEFAULT 0'],
   ];
@@ -103,9 +106,7 @@ function init() {
       WHERE status IN (${RETRYABLE_STATUSES.map(() => '?').join(',')})
       GROUP BY expense_id
     `),
-    prune: db.prepare(
-      "DELETE FROM history WHERE processed_at < datetime('now', ?)"
-    ),
+    prune: db.prepare("DELETE FROM history WHERE processed_at < datetime('now', ?)"),
   };
 
   return db;
@@ -192,7 +193,7 @@ function getHistory(opts = {}) {
     params.push(status);
   }
   if (search) {
-    where.push('(LOWER(title) LIKE ? OR LOWER(COALESCE(group_name, \'\')) LIKE ?)');
+    where.push("(LOWER(title) LIKE ? OR LOWER(COALESCE(group_name, '')) LIKE ?)");
     const like = `%${String(search).toLowerCase()}%`;
     params.push(like, like);
   }
@@ -204,9 +205,7 @@ function getHistory(opts = {}) {
     )
     .all(...params, limit, offset);
 
-  const { total } = db
-    .prepare(`SELECT COUNT(*) AS total FROM history ${whereSql}`)
-    .get(...params);
+  const { total } = db.prepare(`SELECT COUNT(*) AS total FROM history ${whereSql}`).get(...params);
 
   const parked = new Set(getParkedExpenseIds());
   return {

@@ -239,9 +239,7 @@ function coerce(key, raw) {
         .map((p) => String(p).trim())
         .filter(Boolean);
       if (!parts.length) throw new Error(`${spec.label || key} needs at least one value`);
-      return parts.map((p) =>
-        config.parseNumber(spec.label || key, p, { min: 0.01, max: 8760 })
-      );
+      return parts.map((p) => config.parseNumber(spec.label || key, p, { min: 0.01, max: 8760 }));
     }
     case 'url': {
       const value = String(raw).trim().replace(/\/+$/, '');
@@ -294,7 +292,9 @@ function setMany(patch) {
 
   const unknown = Object.keys(patch).filter((k) => !SCHEMA[k]);
   if (unknown.length) {
-    throw Object.assign(new Error(`Unknown setting(s): ${unknown.join(', ')}`), { statusCode: 400 });
+    throw Object.assign(new Error(`Unknown setting(s): ${unknown.join(', ')}`), {
+      statusCode: 400,
+    });
   }
 
   const coerced = {};

@@ -35,9 +35,9 @@ describe('scheduler', () => {
   it('refuses to start on an invalid expression rather than throwing', () => {
     // The settings store rejects bad cron, so this can only arrive from a bad
     // env var — which must not take the whole process down.
-    const spy = jest.spyOn(settingsStore, 'get').mockImplementation((key) =>
-      key === 'scheduler.cronExpression' ? 'not a cron' : true
-    );
+    const spy = jest
+      .spyOn(settingsStore, 'get')
+      .mockImplementation((key) => (key === 'scheduler.cronExpression' ? 'not a cron' : true));
     expect(scheduler.start()).toBe(false);
     spy.mockRestore();
   });
